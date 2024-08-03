@@ -28,16 +28,18 @@ from textual.reactive import reactive
 from transcribe_audio import AudioTranscriber
 from ollama_api import OllamaAPI
 import sounddevice as sd
-
+import signal
 import time
 from textual.containers import Container, VerticalScroll, Horizontal
-
+from textual.binding import Binding
 
 class RealtimeTranscribeToAI(App):
+    CSS_PATH = "gui_textual.tcss"
+    BINDINGS = [Binding("ctrl+q", "quit", "Quit")]
     CSS = """
     Screen {
         layout: grid;
-        grid-size: 4;
+        grid-size: 3;
         grid-gutter: 1;
     }
     #transcription {
@@ -56,11 +58,11 @@ class RealtimeTranscribeToAI(App):
     }
     #ollama {
         height: auto;
-        border: solid cyan;
+        
         overflow-y: auto;
         scrollbar-size: 3 2;
         scrollbar-color: rgba(0,0,0,0.5) rgba(255,255,255,0.5);
-        background: green 20%;
+        background: orange 20%;
     }
     #device {
         border: solid yellow;
@@ -76,11 +78,19 @@ class RealtimeTranscribeToAI(App):
         margin-bottom: 1;
         padding: 1;
     }
+    #left-pane {
+        border: solid orange;
+        height: 100%;
+        overflow-y: auto;
+        column-span: 2;
+        row-span: 2;
+    }
     #log-pane {
         border: solid blue;
         height: 100%;
         overflow-y: auto;
     }
+    
     .paused {
         background: yellow;
     }
@@ -93,6 +103,11 @@ class RealtimeTranscribeToAI(App):
     .capture-running {
         background: green;
         
+    }
+    #device_selector {
+        width: 100%;
+        height: auto;
+        margin: 1;
     }
     """
     # add new window
@@ -110,18 +125,39 @@ class RealtimeTranscribeToAI(App):
         ("Default (with coding)", "default"),
         ("Non-coding Interview", "non_coding_interview"),
     ]
+    devices = sd.query_devices()
+    PROMPT_DEVICE_OPTIONS = [
+        (f"{i}: {device['name']} (in: {device['max_input_channels']}, out: {device['max_output_channels']})", i)
+        for i, device in enumerate(devices)
+    ]
+
+    EXAMPLE_MARKDOWN = """\
+# Markdown Document
+
+This is an example of Textual's `Markdown` widget.
+
+## Features
+
+Markdown syntax and extensions are supported.
+
+- Typography *emphasis*, **strong**, `inline code` etc.
+- Headers
+- Lists (bullet and ordered)
+- Syntax highlighted code blocks
+- Tables!
+"""
 
     def compose(self) -> ComposeResult:
         yield Header()
-        with Container(id="app-grid"):
-            with VerticalScroll(id="left-pane"):
-                yield TextArea("", id="ollama", language="markdown")
+        #with Container(id="app-grid"):
+        with VerticalScroll(id="left-pane"):
+            yield Markdown(markdown="Awaiting input...")
         #yield Static(id="transcription")
         yield TextArea(id="transcription", language="markdown")
         yield TextArea(id="partial", language="markdown")
         #yield Static(id="partial")
-        yield Static(id="device")
-        yield Input(placeholder="Enter the number of the audio input device and press Enter")
+        #yield Static(id="device")
+        yield ListView(id="session_list")
         with Horizontal():
             yield Button(label="Pause Processing", id="pause_button", classes="not-paused", disabled=False)
             yield Button(label="Pause Capture", id="pause_capture_button", classes="capture-running", disabled=False)
@@ -129,27 +165,27 @@ class RealtimeTranscribeToAI(App):
             yield Button(label="Add Detailed Solution Prompt", id="add_solution_prompt", disabled=False)
             yield Button(label="Resubmit Transcription", id="resubmit_transcription", disabled=False)
         yield TextArea(id="user_input")
-        yield Button(label="Submit", id="submit_user_input", variant="primary")
+        yield Button(label="Reprocess using specified coding language", id="reprocess_with_language")
         with RadioSet(id="coding_language"):
             yield RadioButton("No code involved", id="no_code", value=True)
             yield RadioButton("Python", id="python")
             yield RadioButton("JavaScript", id="javascript")
             yield RadioButton("Java", id="java")
             yield RadioButton("C++", id="cpp")
-        yield Button(label="Reprocess using specified coding language", id="reprocess_with_language")
+        yield Button(label="Submit", id="submit_user_input", variant="primary")
         yield Select(
             options=self.PROMPT_OPTIONS,
             id="prompt_selector",
             allow_blank=False
         )
         with VerticalScroll(id="log-pane"):
-            yield Static("", id="log")
-        yield ListView(id="session_list")
+            yield Static("", id="log", classes="lbl3")
+        yield Select(id="device_selector", prompt="Select an audio input device", options=self.PROMPT_DEVICE_OPTIONS, allow_blank=True)
         yield Footer()
 
     def on_mount(self):
         self.devices = self.list_audio_devices()
-        self.query_one("#device").update("\n".join(self.devices))
+        
         self.transcriber = AudioTranscriber()
         self.ollama_api = OllamaAPI(host="http://192.168.1.81:11434", model="llama3.1:latest")
         self.stop_event = False
@@ -158,7 +194,29 @@ class RealtimeTranscribeToAI(App):
         self.log_thread = Thread(target=self.update_log, daemon=True)
         self.log_thread.start()
         self.start_new_session()
+        self.set_timer(0.1, self.update_device_selector)
+        self.query_one("#transcription", TextArea).border_title = "Complete Transcription"
+        self.query_one("#left-pane", VerticalScroll).border_title = "AI Response"
+        self.query_one("#partial", TextArea).border_title = "Partial Transcription"
+        self.query_one("#user_input", TextArea).border_title = "Send Chat Message to AI"
+        self.query_one("#log-pane", VerticalScroll).border_title = "Log"
+        # Set up signal handling
+        signal.signal(signal.SIGINT, self.handle_interrupt)
         
+    
+    def handle_interrupt(self, signum, frame):
+        logging.info("Received interrupt signal. Exiting...")
+        self.exit()
+
+    def update_device_selector(self):
+        device_options = [(device, i) for i, device in enumerate(self.devices)]
+        self.PROMPT_DEVICE_OPTIONS = device_options
+        selector = self.query_one("#device_selector", Select)
+        logging.debug(f"Updating selector with options: {device_options}")
+        selector.options = self.PROMPT_DEVICE_OPTIONS
+        logging.debug(f"Selector options after update: {selector.options}")
+        selector.refresh()
+        selector = Select(options=device_options, id="device_selector", prompt="Select an audio input device")
         
 
     def list_audio_devices(self):
@@ -167,7 +225,15 @@ class RealtimeTranscribeToAI(App):
                 for i, device in enumerate(devices)]
 
     def on_select_changed(self, event: Select.Changed) -> None:
-        if event.select.id == "prompt_selector":
+        if event.select.id == "device_selector":
+            selected_device_index = event.value
+            self.selected_device = self.devices[selected_device_index]
+            logging.info(f"Selected device: {self.selected_device}")
+            #self.query_one("#device").update(f"Selected Device: {self.selected_device}")
+            self.transcribe_thread = Thread(target=self.start_transcribing, args=(selected_device_index,), daemon=True)
+            self.transcribe_thread.start()
+        elif event.select.id == "prompt_selector":
+            # Existing code for prompt selection
             self.ollama_api.set_prompt(event.value)
             self.log(f"Changed prompt to: {event.value}")
 
@@ -197,7 +263,7 @@ class RealtimeTranscribeToAI(App):
                 #logging.debug(f"Updating content - Transcription: {self.transcription}, Partial: {self.partial_transcription}")
                 #self.query_one("#partial").update(self.partial_transcription + 'asdasd')
                 self.query_one("#partial", TextArea).text = self.partial_transcription
-                self.query_one("#transcription", TextArea).text = self.transcription
+                #self.query_one("#transcription", TextArea).text = self.transcription
                 #self.query_one("#transcription").update(self.transcription)
                 
                 
@@ -205,6 +271,7 @@ class RealtimeTranscribeToAI(App):
                 markdown_content = self.ollama_conversation + "\n" + self.processing_status
                 #self.query_one("#ollama").update(Markdown(markdown_content))
                 #self.query_one("#ollama").update(markdown_content)
+                #self.query_one(Markdown).update(markdown_content)
                 
                 should_process, stats = self.ollama_api.should_process()
                 if should_process:
@@ -215,6 +282,7 @@ class RealtimeTranscribeToAI(App):
                     self.processing_status = ""
             
             time.sleep(0.5)  # Reduced frequency of updates
+        logging.info("Update content thread stopped.")
 
     def update_log(self):
         previous_log_content = ""
@@ -225,26 +293,20 @@ class RealtimeTranscribeToAI(App):
                 previous_log_content = log_content
                 self.query_one("#log").update(log_content)
             time.sleep(1)  # Reduced frequency of log updates
+        logging.info("Update log thread stopped.")
 
-    def on_input_submitted(self, event: Input.Submitted):
-        if event.value.lower() == 'q':
-            logging.info("Quit signal received")
-            self.stop_event = True
-            self.transcriber.stop_transcribing()
-            self.exit()
-        else:
-            try:
-                choice = int(event.value)
-                if 0 <= choice < len(self.devices):
-                    self.selected_device = self.devices[choice]
-                    logging.info(f"Selected device: {self.selected_device}")
-                    self.query_one("#device").update(f"Selected Device: {self.selected_device}")
-                    self.transcribe_thread = Thread(target=self.start_transcribing, args=(choice,), daemon=True)
-                    self.transcribe_thread.start()
-                else:
-                    self.query_one("#device").update("Invalid choice. Please try again.")
-            except ValueError:
-                self.query_one("#device").update("Please enter a valid number.")
+    def on_select_changed(self, event: Select.Changed) -> None:
+        if event.select.id == "device_selector":
+            selected_device_index = event.value
+            self.selected_device = self.devices[selected_device_index]
+            logging.info(f"Selected device: {self.selected_device}")
+            #self.query_one("#device").update(f"Selected Device: {self.selected_device}")
+            self.transcribe_thread = Thread(target=self.start_transcribing, args=(selected_device_index,), daemon=True)
+            self.transcribe_thread.start()
+        elif event.select.id == "prompt_selector":
+            # Existing code for prompt selection
+            self.ollama_api.set_prompt(event.value)
+            self.log(f"Changed prompt to: {event.value}")
 
     def on_button_pressed(self, event: Button.Pressed):
         if event.button.id == "pause_button":
@@ -322,8 +384,9 @@ class RealtimeTranscribeToAI(App):
     
     def update_ollama_display(self):
         markdown_content = self.ollama_conversation + "\n"
-        #self.query_one("#ollama").update(markdown_content)
-        self.query_one("#ollama", TextArea).text = markdown_content
+        #self.query_one("#ollama").update(Markdown(markdown_content))
+        #self.query_one("#ollama", Markdown).text = markdown_content
+        self.query_one(Markdown).update(markdown_content)
 
     def start_new_session(self):
         # Create a parent ID
@@ -363,7 +426,7 @@ class RealtimeTranscribeToAI(App):
         # Update the UI
         self.query_one("#transcription").update("")
         self.query_one("#partial").update("")
-        self.query_one("#ollama").update("")
+        self.query_one(Markdown).update("")
 
     def on_list_view_selected(self, event: ListView.Selected):
         selected_session_name = str(event.item.query_one(Label).renderable)
@@ -381,10 +444,33 @@ class RealtimeTranscribeToAI(App):
             self.transcription = selected_session["transcription"]
             self.ollama_conversation = selected_session["ai_responses"]
             self.query_one("#transcription").update(self.transcription)
-            self.query_one("#ollama").update(self.ollama_conversation)
+            self.query_one(Markdown).update(self.ollama_conversation)
+            
         else:
             logging.error("Session not found")
 
+    def cleanup(self):
+        logging.info("Performing cleanup operations...")
+        self.stop_event = True
+        if hasattr(self, 'transcriber'):
+            self.transcriber.stop_transcribing()
+        if hasattr(self, 'update_thread'):
+            self.update_thread.join(timeout=2)
+        if hasattr(self, 'log_thread'):
+            self.log_thread.join(timeout=2)
+        logging.info("Cleanup complete.")
+
+    def exit(self, *args, **kwargs):
+        self.cleanup()
+        super().exit(*args, **kwargs)
+
+    def action_quit(self):
+        self.exit()
+
 if __name__ == "__main__":
     app = RealtimeTranscribeToAI()
-    app.run()
+    try:
+        app.run()
+    except KeyboardInterrupt:
+        print("\nReceived interrupt signal. Shutting down...")
+        app.exit()
