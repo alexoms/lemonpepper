@@ -50,7 +50,7 @@ class OllamaAPI:
         with self.lock:
             self.transcription_buffer.clear()
             self.last_transcription_time = time.time()
-            
+
     def set_prompt(self, prompt_name):
         if prompt_name in self.prompts:
             self.current_prompt = prompt_name
@@ -111,8 +111,7 @@ class OllamaAPI:
                           word_count >= self.min_words_to_process and
                           (time_since_last > self.pause_threshold or 
                            time_since_start > self.max_buffer_time) and
-                          time_since_last_process >= self.processing_threshold and
-                          new_content)
+                          time_since_last_process >= self.processing_threshold and new_content)
         
         return should_process, {
             "time_since_last": time_since_last,
@@ -128,8 +127,9 @@ class OllamaAPI:
                 return "No transcription to process."
 
             full_transcription = " ".join(self.transcription_buffer)
-            if not force and full_transcription.strip() == self.last_processed_transcription:
-                return "No new content to process."
+            #if not force and full_transcription.strip() == self.last_processed_transcription:
+            #if full_transcription.strip() == self.last_processed_transcription:
+            #    return "No new content to process."
 
             self.last_processed_transcription = full_transcription.strip()
         

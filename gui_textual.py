@@ -22,7 +22,7 @@ import uuid
 from datetime import datetime
 
 from textual.app import App, ComposeResult
-from textual.widgets import Header, Footer, Static, Input, Button, ListView, ListItem, Label, Markdown, TextArea, RadioSet, RadioButton, Select
+from textual.widgets import Header, Footer, Static, Input, Button, ListView, ListItem, Label, Markdown, TextArea, RadioSet, RadioButton, Select, RichLog
 from textual.reactive import reactive
 
 from transcribe_audio import AudioTranscriber
@@ -32,6 +32,15 @@ import signal
 import time
 from textual.containers import Container, VerticalScroll, Horizontal
 from textual.binding import Binding
+import re
+from textual.message import Message
+from rich.markdown import Markdown as RichMarkdown
+
+class UpdateOllamaDisplay(Message):
+    def __init__(self, conversation: str, status: str):
+        self.conversation = conversation
+        self.status = status
+        super().__init__()
 
 class RealtimeTranscribeToAI(App):
     CSS_PATH = "gui_textual.tcss"
@@ -85,14 +94,14 @@ class RealtimeTranscribeToAI(App):
         height: 100%;
         overflow-y: auto;
         column-span: 2;
-        row-span: 12;
+        row-span: 9;
     }
     #log-pane {
         border: solid blue;
         height: 100%;
         overflow-y: auto;
         column-span: 2;
-        row-span: 1;
+        row-span: 4;
     }
     #session-list {
         column-span: 1;
@@ -146,7 +155,9 @@ class RealtimeTranscribeToAI(App):
         yield Header()
         #with Container(id="app-grid"):
         with VerticalScroll(id="left-pane"):
-            yield Markdown(markdown="Awaiting input...")
+            #yield RichLog(id="ollama")
+            yield Static(id="ollama")
+            yield Markdown()
         #yield Static(id="transcription")
         yield TextArea(id="transcription", language="markdown")
         yield TextArea(id="partial", language="markdown")
@@ -172,14 +183,14 @@ class RealtimeTranscribeToAI(App):
             yield RadioButton("Rust", id="rust")
             yield RadioButton("C++", id="cpp")
         yield Button(label="Reprocess using specified coding language", id="reprocess_with_language")
-
+        with VerticalScroll(id="log-pane"):
+            yield Static("", id="log", classes="lbl3")
         yield Select(
             options=self.PROMPT_OPTIONS,
             id="prompt_selector",
             allow_blank=False
         )
-        with VerticalScroll(id="log-pane"):
-            yield Static("", id="log", classes="lbl3")
+        
         yield Select(id="device_selector", prompt="Select an audio input device", options=self.PROMPT_DEVICE_OPTIONS, allow_blank=True)
         yield Footer()
 
@@ -202,8 +213,56 @@ class RealtimeTranscribeToAI(App):
         self.query_one("#log-pane", VerticalScroll).border_title = "Log"
         # Set up signal handling
         signal.signal(signal.SIGINT, self.handle_interrupt)
-        
+        self.update_thread = Thread(target=self.update_content, daemon=True)
+        self.update_thread.start()
     
+    def sanitize_markdown(self, text):
+        # Remove any potential HTML tags
+        text = re.sub('<[^<]+?>', '', text)
+        # Escape special Markdown characters
+        text = re.sub(r'([\\`*_{}[\]()#+\-.!])', r'\\\1', text)
+        return text
+
+    #def watch_ollama_conversation(self, new_value: str):
+    #    #self.query_one(Markdown).update(new_value)
+        #self.query_one("#ollama").update(new_value)
+    #    test=1
+    def watch_ollama_conversation(self):
+        self.update_ollama_display()
+
+    def watch_processing_status(self):
+        self.update_ollama_display()
+
+    def update_ollama_display(self):
+        try:
+            markdown_content = self.ollama_conversation
+            #logging.info(markdown_content)
+            #self.query_one(Markdown).update(markdown_content)
+            md = RichMarkdown(markdown_content)
+            self.query_one("#ollama", Static).update(md)
+        except Exception as e:
+            logging.error(f"Error updating Markdown: {e}")
+            # Fallback to using a Static widget
+            self.query_one("#ollama", Static).update(markdown_content)
+    
+    def on_update_ollama_display(self, message: UpdateOllamaDisplay):
+        self.ollama_conversation = message.conversation
+        self.processing_status = message.status
+        self.update_ollama_display()
+
+    #def update_ollama_display(self):
+        #logging.info(self.ollama_conversation)
+        #self.ollama_conversation = self.ollama_api.get_responses()
+        #markdown_content = self.sanitize_markdown(self.ollama_conversation)
+        #self.query_one("#ollama").update(self.ollama_conversation)
+        #self.query_one("#ollama", RichLog).write(self.ollama_conversation)
+        #self.query_one(Markdown).update(markdown_content)
+    #def update_ollama_display(self):
+    #    markdown_content = self.ollama_conversation + "\n"
+        #self.query_one("#ollama").update(Markdown(markdown_content))
+        #self.query_one("#ollama", Markdown).text = markdown_content
+        #self.query_one(Markdown).update(markdown_content)
+    #    self.query_one("#ollama").update(markdown_content)
     def handle_interrupt(self, signum, frame):
         logging.info("Received interrupt signal. Exiting...")
         self.exit()
@@ -237,21 +296,25 @@ class RealtimeTranscribeToAI(App):
             self.ollama_api.set_prompt(event.value)
             self.log(f"Changed prompt to: {event.value}")
 
+
     def transcription_callback(self, text, is_partial=False):
-        if is_partial:
-            self.partial_transcription = text
-        else:
-            self.transcription += text + "\n"
-            self.partial_transcription = ""
-            self.ollama_api.add_transcription(text)
-        
-        # Update the current session
-        if self.current_session_id:
-            self.history[self.current_session_id]["transcription"] = self.transcription
-
-        # Update the TextArea
-        self.query_one("#transcription", TextArea).text = self.transcription
-
+        def update():
+            if is_partial:
+                self.partial_transcription = text
+                self.query_one("#partial", TextArea).text = self.partial_transcription
+            else:
+                self.transcription += text + "\n"
+                self.partial_transcription = ""
+                self.ollama_api.add_transcription(text)
+            
+            if self.current_session_id:
+                self.history[self.current_session_id]["transcription"] = self.transcription
+            
+            # Update the TextArea
+            self.query_one("#transcription", TextArea).text = self.transcription
+            #self.update_ollama_display()
+            #self.query_one(Markdown).update(self.history[self.current_session_id]["ai_responses"])
+        self.call_from_thread(update)
 
     def start_transcribing(self, device_index):
         self.transcriber.start_transcribing(device_index=device_index, transcription_callback=self.transcription_callback)
@@ -259,7 +322,9 @@ class RealtimeTranscribeToAI(App):
     def update_content(self):
         while not self.stop_event:
             if not self.is_paused:
-                self.update_ollama_display()
+                conversation = self.ollama_api.get_responses()
+                status = self.processing_status
+                self.post_message(UpdateOllamaDisplay(conversation, status))
                 #logging.debug(f"Updating content - Transcription: {self.transcription}, Partial: {self.partial_transcription}")
                 #self.query_one("#partial").update(self.partial_transcription + 'asdasd')
                 self.query_one("#partial", TextArea).text = self.partial_transcription
@@ -268,18 +333,22 @@ class RealtimeTranscribeToAI(App):
                 
                 
                 # Update the Markdown widget with the content
-                markdown_content = self.ollama_conversation + "\n" + self.processing_status
+                #markdown_content = self.ollama_conversation
                 #self.query_one("#ollama").update(Markdown(markdown_content))
                 #self.query_one("#ollama").update(markdown_content)
-                #self.query_one(Markdown).update(markdown_content)
+                #self.query_one(Markdown).update("""stuff""")
                 
                 should_process, stats = self.ollama_api.should_process()
+                logging.info(f"Should process: {should_process}")
                 if should_process:
                     self.processing_status = "Processing transcription..."
                     response = self.ollama_api.process_transcription()
                     self.ollama_conversation = self.ollama_api.get_responses()
                     self.history[self.current_session_id]["ai_responses"] = self.ollama_conversation
+                    #self.update_ollama_display()
+                    logging.info(f"Updating content - Response: {self.ollama_conversation}")
                     self.processing_status = ""
+                    #self.query_one(Markdown).update(self.history[self.current_session_id]["ai_responses"])
             
             time.sleep(0.5)  # Reduced frequency of updates
         logging.info("Update content thread stopped.")
@@ -382,11 +451,7 @@ class RealtimeTranscribeToAI(App):
         self.update_ollama_display()
         self.log("Transcription processed.")
     
-    def update_ollama_display(self):
-        markdown_content = self.ollama_conversation + "\n"
-        #self.query_one("#ollama").update(Markdown(markdown_content))
-        #self.query_one("#ollama", Markdown).text = markdown_content
-        self.query_one(Markdown).update(markdown_content)
+    
 
     def start_new_session(self):
         # Create a parent ID
