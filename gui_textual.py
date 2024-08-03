@@ -169,6 +169,7 @@ class RealtimeTranscribeToAI(App):
             yield RadioButton("Python", id="python")
             yield RadioButton("JavaScript", id="javascript")
             yield RadioButton("Java JDK 1.8", id="java_jdk_1_8")
+            yield RadioButton("Rust", id="rust")
             yield RadioButton("C++", id="cpp")
         yield Button(label="Reprocess using specified coding language", id="reprocess_with_language")
 
@@ -442,7 +443,7 @@ class RealtimeTranscribeToAI(App):
             logging.info(f"AI Responses: {selected_session['ai_responses']}")
             self.transcription = selected_session["transcription"]
             self.ollama_conversation = selected_session["ai_responses"]
-            self.query_one("#transcription").update(self.transcription)
+            self.query_one("#transcription", TextArea).text = self.transcription
             self.query_one(Markdown).update(self.ollama_conversation)
             
         else:
