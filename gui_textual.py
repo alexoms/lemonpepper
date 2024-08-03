@@ -46,6 +46,8 @@ class RealtimeTranscribeToAI(App):
         height: 100%;
         border: solid green;
         overflow-y: auto;
+        column-span: 1;
+        row-span: 2;
     }
     #partial {
         height: 100%;
@@ -54,7 +56,7 @@ class RealtimeTranscribeToAI(App):
     }
     #app-grid {
         column-span: 2;
-        row-span: 2;
+        row-span: 5;
     }
     #ollama {
         height: auto;
@@ -83,14 +85,23 @@ class RealtimeTranscribeToAI(App):
         height: 100%;
         overflow-y: auto;
         column-span: 2;
-        row-span: 2;
+        row-span: 12;
     }
     #log-pane {
         border: solid blue;
         height: 100%;
         overflow-y: auto;
+        column-span: 2;
+        row-span: 1;
     }
-    
+    #session-list {
+        column-span: 1;
+        row-span: 1;
+    }
+    #coding_language {
+        column-span: 1;
+        row-span: 3;
+    }
     .paused {
         background: yellow;
     }
@@ -131,22 +142,6 @@ class RealtimeTranscribeToAI(App):
         for i, device in enumerate(devices)
     ]
 
-    EXAMPLE_MARKDOWN = """\
-# Markdown Document
-
-This is an example of Textual's `Markdown` widget.
-
-## Features
-
-Markdown syntax and extensions are supported.
-
-- Typography *emphasis*, **strong**, `inline code` etc.
-- Headers
-- Lists (bullet and ordered)
-- Syntax highlighted code blocks
-- Tables!
-"""
-
     def compose(self) -> ComposeResult:
         yield Header()
         #with Container(id="app-grid"):
@@ -158,21 +153,25 @@ Markdown syntax and extensions are supported.
         #yield Static(id="partial")
         #yield Static(id="device")
         yield ListView(id="session_list")
+
         with Horizontal():
             yield Button(label="Pause Processing", id="pause_button", classes="not-paused", disabled=False)
             yield Button(label="Pause Capture", id="pause_capture_button", classes="capture-running", disabled=False)
             yield Button(label="Clear", id="clear_button", disabled=False)
             yield Button(label="Add Detailed Solution Prompt", id="add_solution_prompt", disabled=False)
             yield Button(label="Resubmit Transcription", id="resubmit_transcription", disabled=False)
+
         yield TextArea(id="user_input")
-        yield Button(label="Reprocess using specified coding language", id="reprocess_with_language")
+        yield Button(label="Submit", id="submit_user_input", variant="primary")
+        
         with RadioSet(id="coding_language"):
             yield RadioButton("No code involved", id="no_code", value=True)
             yield RadioButton("Python", id="python")
             yield RadioButton("JavaScript", id="javascript")
-            yield RadioButton("Java", id="java")
+            yield RadioButton("Java JDK 1.8", id="java_jdk_1_8")
             yield RadioButton("C++", id="cpp")
-        yield Button(label="Submit", id="submit_user_input", variant="primary")
+        yield Button(label="Reprocess using specified coding language", id="reprocess_with_language")
+
         yield Select(
             options=self.PROMPT_OPTIONS,
             id="prompt_selector",
@@ -424,8 +423,8 @@ Markdown syntax and extensions are supported.
         self.start_new_session()
 
         # Update the UI
-        self.query_one("#transcription").update("")
-        self.query_one("#partial").update("")
+        self.query_one("#transcription", TextArea).text = ""
+        self.query_one("#partial", TextArea).text = ""
         self.query_one(Markdown).update("")
 
     def on_list_view_selected(self, event: ListView.Selected):
