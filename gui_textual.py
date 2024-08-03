@@ -46,7 +46,7 @@ class RealtimeTranscribeToAI(App):
         overflow-y: auto;
     }
     #partial {
-        height: 30%;
+        height: 100%;
         border: solid magenta;
         overflow-y: auto;
     }
@@ -115,9 +115,11 @@ class RealtimeTranscribeToAI(App):
         yield Header()
         with Container(id="app-grid"):
             with VerticalScroll(id="left-pane"):
-                yield Static("", id="ollama")
-        yield Static(id="transcription")
-        yield Static(id="partial")
+                yield TextArea("", id="ollama", language="markdown")
+        #yield Static(id="transcription")
+        yield TextArea(id="transcription", language="markdown")
+        yield TextArea(id="partial", language="markdown")
+        #yield Static(id="partial")
         yield Static(id="device")
         yield Input(placeholder="Enter the number of the audio input device and press Enter")
         with Horizontal():
@@ -125,6 +127,7 @@ class RealtimeTranscribeToAI(App):
             yield Button(label="Pause Capture", id="pause_capture_button", classes="capture-running", disabled=False)
             yield Button(label="Clear", id="clear_button", disabled=False)
             yield Button(label="Add Detailed Solution Prompt", id="add_solution_prompt", disabled=False)
+            yield Button(label="Resubmit Transcription", id="resubmit_transcription", disabled=False)
         yield TextArea(id="user_input")
         yield Button(label="Submit", id="submit_user_input", variant="primary")
         with RadioSet(id="coding_language"):
@@ -169,7 +172,6 @@ class RealtimeTranscribeToAI(App):
             self.log(f"Changed prompt to: {event.value}")
 
     def transcription_callback(self, text, is_partial=False):
-        logging.info(f"Transcription callback: {'partial' if is_partial else 'full'} - {text}")
         if is_partial:
             self.partial_transcription = text
         else:
@@ -181,6 +183,10 @@ class RealtimeTranscribeToAI(App):
         if self.current_session_id:
             self.history[self.current_session_id]["transcription"] = self.transcription
 
+        # Update the TextArea
+        self.query_one("#transcription", TextArea).text = self.transcription
+
+
     def start_transcribing(self, device_index):
         self.transcriber.start_transcribing(device_index=device_index, transcription_callback=self.transcription_callback)
 
@@ -189,13 +195,16 @@ class RealtimeTranscribeToAI(App):
             if not self.is_paused:
                 self.update_ollama_display()
                 #logging.debug(f"Updating content - Transcription: {self.transcription}, Partial: {self.partial_transcription}")
-                self.query_one("#transcription").update(self.transcription)
-                self.query_one("#partial").update(self.partial_transcription)
+                #self.query_one("#partial").update(self.partial_transcription + 'asdasd')
+                self.query_one("#partial", TextArea).text = self.partial_transcription
+                self.query_one("#transcription", TextArea).text = self.transcription
+                #self.query_one("#transcription").update(self.transcription)
+                
                 
                 # Update the Markdown widget with the content
                 markdown_content = self.ollama_conversation + "\n" + self.processing_status
                 #self.query_one("#ollama").update(Markdown(markdown_content))
-                self.query_one("#ollama").update(markdown_content)
+                #self.query_one("#ollama").update(markdown_content)
                 
                 should_process, stats = self.ollama_api.should_process()
                 if should_process:
@@ -265,6 +274,15 @@ class RealtimeTranscribeToAI(App):
             self.submit_user_input()
         elif event.button.id == "reprocess_with_language":
             self.reprocess_with_language()
+        elif event.button.id == "resubmit_transcription":
+            self.resubmit_transcription()
+
+    def resubmit_transcription(self):
+        transcription = self.query_one("#transcription", TextArea).text
+        self.log("Resubmitting edited transcription")
+        self.ollama_api.clear_transcription()
+        self.ollama_api.add_transcription(transcription)
+        self.force_process_transcription()
 
     def submit_user_input(self):
         user_input = self.query_one("#user_input").text
@@ -304,7 +322,8 @@ class RealtimeTranscribeToAI(App):
     
     def update_ollama_display(self):
         markdown_content = self.ollama_conversation + "\n"
-        self.query_one("#ollama").update(markdown_content)
+        #self.query_one("#ollama").update(markdown_content)
+        self.query_one("#ollama", TextArea).text = markdown_content
 
     def start_new_session(self):
         # Create a parent ID

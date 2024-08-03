@@ -46,6 +46,11 @@ class OllamaAPI:
             f"Focus on conceptual explanations and avoid using code examples in your response."
         )
     
+    def clear_transcription(self):
+        with self.lock:
+            self.transcription_buffer.clear()
+            self.last_transcription_time = time.time()
+            
     def set_prompt(self, prompt_name):
         if prompt_name in self.prompts:
             self.current_prompt = prompt_name

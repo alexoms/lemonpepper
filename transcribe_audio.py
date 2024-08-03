@@ -24,7 +24,7 @@ class AudioTranscriber:
         self.pause_event = threading.Event()
         self.audio_thread = None
         self.input_stream = None
-        self.vad = webrtcvad.Vad(3)  # VAD aggressiveness is set to 3 (highest)
+        self.vad = webrtcvad.Vad(1)  # VAD aggressiveness is set to 3 (highest)
         self.ring_buffer = collections.deque(maxlen=30)  # 30 * 30ms = 900ms audio buffer
         self.silence_threshold = 2.0  # 2 seconds of silence before considering it a pause
         self.min_transcription_length = 3  # Minimum number of words to consider a transcription valid
