@@ -6,13 +6,15 @@ import json
 import threading
 import time
 import logging
+import webrtcvad
+import collections
 
 logging.basicConfig(level=logging.CRITICAL, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class AudioTranscriber:
-    def __init__(self, model_path="../vosk-model-small-en-us-0.15/", sample_rate=44100, channels=2, chunk=1024):
+    def __init__(self, model_path="../vosk-model-en-us-0.42-gigaspeech/", sample_rate=16000, channels=1, chunk=480):
         self.model = vosk.Model(model_path)
-        self.recognizer = vosk.KaldiRecognizer(self.model, 16000)
+        self.recognizer = vosk.KaldiRecognizer(self.model, sample_rate)
         self.sample_rate = sample_rate
         self.channels = channels
         self.chunk = chunk
@@ -22,44 +24,80 @@ class AudioTranscriber:
         self.pause_event = threading.Event()
         self.audio_thread = None
         self.input_stream = None
-        logging.info("AudioTranscriber initialized")
+        self.vad = webrtcvad.Vad(3)  # VAD aggressiveness is set to 3 (highest)
+        self.ring_buffer = collections.deque(maxlen=30)  # 30 * 30ms = 900ms audio buffer
+        self.silence_threshold = 2.0  # 2 seconds of silence before considering it a pause
+        self.min_transcription_length = 3  # Minimum number of words to consider a transcription valid
+        logging.info("AudioTranscriber initialized with VAD")
 
     def audio_callback(self, indata, frames, time, status):
         if status:
             logging.warning(f"Audio callback status: {status}")
         if not self.pause_event.is_set():
             self.audio_queue.put(indata.copy())
-            logging.debug("Audio data added to queue")
 
     def process_audio(self):
         audio_buffer = np.array([])
-        logging.info("Audio processing started")
+        logging.info("Audio processing started with VAD")
+        last_speech_time = time.time()
+        continuous_silence = 0
+        current_partial = ""
 
         while not self.stop_event.is_set():
             try:
                 audio_data = self.audio_queue.get(timeout=1)
-                mono_data = audio_data.mean(axis=1)
-                mono_data = mono_data[::3]  # Downsample from 44.1kHz to 16kHz
+                mono_data = audio_data.mean(axis=1) if audio_data.ndim > 1 else audio_data
+                
+                audio_int16 = (mono_data * 32767).astype(np.int16)
+                
+                # Process in 30ms chunks (480 samples at 16kHz)
+                for i in range(0, len(audio_int16), self.chunk):
+                    chunk = audio_int16[i:i+self.chunk]
+                    if len(chunk) == self.chunk:
+                        is_speech = self.vad.is_speech(chunk.tobytes(), self.sample_rate)
+                        self.ring_buffer.append((chunk, is_speech))
+                        if is_speech:
+                            last_speech_time = time.time()
+                            continuous_silence = 0
+                        else:
+                            continuous_silence += self.chunk / self.sample_rate
 
-                audio_buffer = np.concatenate((audio_buffer, mono_data))
-
-                if len(audio_buffer) >= 8192:
-                    audio_int16 = (audio_buffer * 32767).astype(np.int16)
-
-                    if self.recognizer.AcceptWaveform(audio_int16.tobytes()):
+                num_voiced = len([f for f, speech in self.ring_buffer if speech])
+                current_time = time.time()
+                
+                if num_voiced > 0.9 * self.ring_buffer.maxlen:
+                    voiced_audio = np.concatenate([chunk for chunk, _ in self.ring_buffer])
+                    
+                    if self.recognizer.AcceptWaveform(voiced_audio.tobytes()):
                         result = json.loads(self.recognizer.Result())
-                        if result['text']:
+                        if result['text'] and len(result['text'].split()) >= self.min_transcription_length:
                             logging.info(f"Full transcription: {result['text']}")
                             if self.transcription_callback:
                                 self.transcription_callback(result['text'], is_partial=False)
+                            current_partial = ""  # Reset partial transcription
                     else:
                         partial = json.loads(self.recognizer.PartialResult())
-                        if partial['partial']:
+                        if partial['partial'] and len(partial['partial'].split()) >= self.min_transcription_length:
                             logging.info(f"Partial transcription: {partial['partial']}")
                             if self.transcription_callback:
                                 self.transcription_callback(partial['partial'], is_partial=True)
-
-                    audio_buffer = np.array([])
+                            current_partial = partial['partial']  # Update current partial transcription
+                    
+                    self.ring_buffer.clear()
+                elif continuous_silence > self.silence_threshold:
+                    # If there's been silence for more than the threshold
+                    if current_partial and len(current_partial.split()) >= self.min_transcription_length:
+                        # Send the current partial transcription as a full transcription
+                        logging.info(f"Silence detected, sending partial as full: {current_partial}")
+                        if self.transcription_callback:
+                            self.transcription_callback(current_partial, is_partial=False)
+                    else:
+                        # If no valid partial transcription, just log the silence detection
+                        logging.info("Silence detected, no valid transcription to send")
+                    
+                    self.ring_buffer.clear()
+                    continuous_silence = 0
+                    current_partial = ""  # Reset partial transcription
 
             except queue.Empty:
                 continue

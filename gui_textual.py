@@ -10,7 +10,8 @@ log_lock = Lock()
 class RotatingLogHandler(logging.Handler):
     def emit(self, record):
         with log_lock:
-            log_buffer.append(self.format(record))
+            log_buffer.appendleft(self.format(record)) 
+            #log_buffer.append(self.format(record))
 
 # Configure logging to use the custom handler
 handler = RotatingLogHandler()
@@ -21,7 +22,7 @@ import uuid
 from datetime import datetime
 
 from textual.app import App, ComposeResult
-from textual.widgets import Header, Footer, Static, Input, Button, ListView, ListItem, Label, Markdown
+from textual.widgets import Header, Footer, Static, Input, Button, ListView, ListItem, Label, Markdown, TextArea, RadioSet, RadioButton, Select
 from textual.reactive import reactive
 
 from transcribe_audio import AudioTranscriber
@@ -105,6 +106,10 @@ class RealtimeTranscribeToAI(App):
     is_capture_paused = reactive(False)
     history = reactive({})
     current_session_id = reactive("")
+    PROMPT_OPTIONS = [
+        ("Default (with coding)", "default"),
+        ("Non-coding Interview", "non_coding_interview"),
+    ]
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -119,6 +124,21 @@ class RealtimeTranscribeToAI(App):
             yield Button(label="Pause Processing", id="pause_button", classes="not-paused", disabled=False)
             yield Button(label="Pause Capture", id="pause_capture_button", classes="capture-running", disabled=False)
             yield Button(label="Clear", id="clear_button", disabled=False)
+            yield Button(label="Add Detailed Solution Prompt", id="add_solution_prompt", disabled=False)
+        yield TextArea(id="user_input")
+        yield Button(label="Submit", id="submit_user_input", variant="primary")
+        with RadioSet(id="coding_language"):
+            yield RadioButton("No code involved", id="no_code", value=True)
+            yield RadioButton("Python", id="python")
+            yield RadioButton("JavaScript", id="javascript")
+            yield RadioButton("Java", id="java")
+            yield RadioButton("C++", id="cpp")
+        yield Button(label="Reprocess using specified coding language", id="reprocess_with_language")
+        yield Select(
+            options=self.PROMPT_OPTIONS,
+            id="prompt_selector",
+            allow_blank=False
+        )
         with VerticalScroll(id="log-pane"):
             yield Static("", id="log")
         yield ListView(id="session_list")
@@ -135,11 +155,18 @@ class RealtimeTranscribeToAI(App):
         self.log_thread = Thread(target=self.update_log, daemon=True)
         self.log_thread.start()
         self.start_new_session()
+        
+        
 
     def list_audio_devices(self):
         devices = sd.query_devices()
         return [f"{i}: {device['name']} (in: {device['max_input_channels']}, out: {device['max_output_channels']})"
                 for i, device in enumerate(devices)]
+
+    def on_select_changed(self, event: Select.Changed) -> None:
+        if event.select.id == "prompt_selector":
+            self.ollama_api.set_prompt(event.value)
+            self.log(f"Changed prompt to: {event.value}")
 
     def transcription_callback(self, text, is_partial=False):
         logging.info(f"Transcription callback: {'partial' if is_partial else 'full'} - {text}")
@@ -160,7 +187,8 @@ class RealtimeTranscribeToAI(App):
     def update_content(self):
         while not self.stop_event:
             if not self.is_paused:
-                logging.debug(f"Updating content - Transcription: {self.transcription}, Partial: {self.partial_transcription}")
+                self.update_ollama_display()
+                #logging.debug(f"Updating content - Transcription: {self.transcription}, Partial: {self.partial_transcription}")
                 self.query_one("#transcription").update(self.transcription)
                 self.query_one("#partial").update(self.partial_transcription)
                 
@@ -231,6 +259,52 @@ class RealtimeTranscribeToAI(App):
         elif event.button.id == "clear_button":
             self.clear_all_data()
             logging.info("All data cleared")
+        elif event.button.id == "add_solution_prompt":
+            self.add_solution_prompt()
+        elif event.button.id == "submit_user_input":
+            self.submit_user_input()
+        elif event.button.id == "reprocess_with_language":
+            self.reprocess_with_language()
+
+    def submit_user_input(self):
+        user_input = self.query_one("#user_input").text
+        if user_input.strip():
+            self.ollama_api.append_to_transcription(f"\nUser input: {user_input}")
+            self.force_process_transcription()
+            self.query_one("#user_input").clear()  # Clear the input after submission
+
+    def add_solution_prompt(self):
+        prompt_addition = "\nPlease provide a detailed solution with the information given."
+        self.ollama_api.append_to_transcription(prompt_addition)
+        self.force_process_transcription()
+
+    def reprocess_with_language(self):
+        selected_language = self.query_one("#coding_language").pressed_button
+        if selected_language:
+            language = selected_language.id
+            self.log(f"Reprocessing with language: {language}")
+            
+            if language == "no_code":
+                prompt_addition = "\nPlease provide a solution without using any code."
+            else:
+                prompt_addition = f"\nIf the solution involves writing code, use the programming language {language}."
+            
+            self.ollama_api.append_to_transcription(prompt_addition)
+            self.force_process_transcription()
+        else:
+            self.log("Please select a language before reprocessing.")
+
+    def force_process_transcription(self):
+        self.log("Processing transcription...")
+        response = self.ollama_api.process_transcription(force=True)
+        self.ollama_conversation = self.ollama_api.get_responses()
+        self.history[self.current_session_id]["ai_responses"] = self.ollama_conversation
+        self.update_ollama_display()
+        self.log("Transcription processed.")
+    
+    def update_ollama_display(self):
+        markdown_content = self.ollama_conversation + "\n"
+        self.query_one("#ollama").update(markdown_content)
 
     def start_new_session(self):
         # Create a parent ID
