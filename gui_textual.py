@@ -40,6 +40,8 @@ from transcribe_audio import AudioTranscriber
 from transcribe_audio_google_cloud import AudioTranscriberGoogleCloud
 from rich.console import Console
 from rich.text import Text
+from pyperclip import copy as copy_to_clipboard
+from io import StringIO
 
 class UpdateOllamaDisplay(Message):
     def __init__(self, conversation: str, status: str):
@@ -113,7 +115,9 @@ class RealtimeTranscribeToAI(App):
         ("Google Cloud", "google_cloud")
     ]
     CSS_PATH = "gui_textual.tcss"
-    BINDINGS = [Binding("ctrl+q", "quit", "Quit")]
+    BINDINGS = [Binding("ctrl+q", "quit", "Quit"),
+                Binding("ctrl+c", "copy_ai_response", "Copy AI Response")
+                ]
     CSS = """
     Screen {
         layout: grid;
@@ -291,6 +295,7 @@ class RealtimeTranscribeToAI(App):
                     #yield RichLog(id="ollama")
                     yield Static(id="ollama")
                     yield Markdown()
+                    yield Button("Copy to Clipboard", id="copy_ai_response", tooltip="Copy AI response to clipboard")
                 #yield Static(id="transcription")
                 yield TextArea(id="transcription", language="markdown")
                 yield TextArea(id="partial", language="markdown")
@@ -417,6 +422,9 @@ http://www.unidatum.com/""")
             self.transcription_method = selected_value
             self.initialize_transcriber()
             self.log(f"Changed transcription method to: {event.pressed.label}")
+
+    def action_copy_ai_response(self):
+        self.copy_ai_response_to_clipboard()
 
     def update_ai_status(self, status: str):
         footer = self.query_one(CustomFooter)
@@ -636,6 +644,19 @@ http://www.unidatum.com/""")
             self.reprocess_with_language()
         elif event.button.id == "resubmit_transcription":
             self.resubmit_transcription()
+        elif event.button.id == "copy_ai_response":
+            self.copy_ai_response_to_clipboard()
+
+    def copy_ai_response_to_clipboard(self):
+        # Assuming ollama_conversation contains the Markdown string
+        markdown_content = self.ollama_conversation
+
+        # If ollama_conversation is not directly accessible, you might need to get it from the widget
+        # markdown_content = self.query_one("#ollama", Static).renderable.markup
+
+        # Copy the Markdown content to clipboard
+        copy_to_clipboard(markdown_content)
+        self.notify("AI response (with Markdown) copied to clipboard", timeout=3)
 
     def resubmit_transcription(self):
         transcription = self.query_one("#transcription", TextArea).text
