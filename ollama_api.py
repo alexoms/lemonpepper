@@ -24,6 +24,7 @@ class OllamaAPI:
             "non_coding_interview": self.non_coding_interview_prompt
         }
         self.current_prompt = "default"
+        
 
     def default_prompt(self, transcription):
         return (
@@ -86,7 +87,7 @@ class OllamaAPI:
             with self.lock:
                 self.conversation_history.append(f"Human: {prompt}")
                 self.conversation_history.append(f"AI: {response['response']}")
-                self.response_history.insert(0, f"AI: {response['response']}")
+                #self.response_history.insert(0, f"AI: {response['response']}")
                 if len(self.conversation_history) > 10:
                     self.conversation_history = self.conversation_history[-10:]
             

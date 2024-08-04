@@ -9,7 +9,8 @@ import logging
 import webrtcvad
 import collections
 
-logging.basicConfig(level=logging.CRITICAL, format='%(asctime)s - %(levelname)s - %(message)s')
+#logging.basicConfig(level=logging.CRITICAL, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.WARNING)  # Change to WARNING or ERROR in production
 
 class AudioTranscriber:
     def __init__(self, model_path="../vosk-model-en-us-0.42-gigaspeech/", sample_rate=16000, channels=1, chunk=480):
@@ -24,16 +25,41 @@ class AudioTranscriber:
         self.pause_event = threading.Event()
         self.audio_thread = None
         self.input_stream = None
-        self.vad = webrtcvad.Vad(1)  # VAD aggressiveness is set to 3 (highest)
-        self.ring_buffer = collections.deque(maxlen=30)  # 30 * 30ms = 900ms audio buffer
-        self.silence_threshold = 2.0  # 2 seconds of silence before considering it a pause
+        self.vad = webrtcvad.Vad(0)  # VAD aggressiveness is set to 3 (highest)
+        self.ring_buffer = collections.deque(maxlen=45)  # 30 * 30ms = 900ms audio buffer
+        self.silence_threshold = 3.0  # 2 seconds of silence before considering it a pause
+        self.trailing_silence = 1.0  # Add 1 second of trailing silence
         self.min_transcription_length = 3  # Minimum number of words to consider a transcription valid
         logging.info("AudioTranscriber initialized with VAD")
+        # New attributes for audio levels and gain
+        self.audio_levels = [0] * channels
+        self.peak_levels = [float('-inf')] * channels
+        self.gain = 1.0
+        self.silence_threshold_db = -60  # Adjust as needed
 
+    def set_gain(self, gain):
+        self.gain = gain
+
+    def get_audio_levels(self):
+        return self.audio_levels, self.peak_levels
+    
+    def reset_peak_levels(self):
+        self.peak_levels = [float('-inf')] * self.channels
+    
     def audio_callback(self, indata, frames, time, status):
         if status:
-            logging.warning(f"Audio callback status: {status}")
+            print(f"Audio callback status: {status}")
         if not self.pause_event.is_set():
+            # Apply gain
+            indata = indata * self.gain
+            # Calculate RMS for each channel
+            rms_levels = [np.sqrt(np.mean(indata[:, i]**2)) for i in range(self.channels)]
+            # Convert to dB
+            db_levels = [20 * np.log10(max(level, 1e-7)) for level in rms_levels]
+            # Apply silence threshold
+            self.audio_levels = [max(level, self.silence_threshold_db) for level in db_levels]
+            # Update peak levels
+            self.peak_levels = [max(current, peak) for current, peak in zip(self.audio_levels, self.peak_levels)]
             self.audio_queue.put(indata.copy())
 
     def process_audio(self):
@@ -42,10 +68,11 @@ class AudioTranscriber:
         last_speech_time = time.time()
         continuous_silence = 0
         current_partial = ""
+        trailing_silence_samples = int(self.trailing_silence * self.sample_rate)
 
         while not self.stop_event.is_set():
             try:
-                audio_data = self.audio_queue.get(timeout=1)
+                audio_data = self.audio_queue.get(timeout=0.1)
                 mono_data = audio_data.mean(axis=1) if audio_data.ndim > 1 else audio_data
                 
                 audio_int16 = (mono_data * 32767).astype(np.int16)
@@ -87,13 +114,26 @@ class AudioTranscriber:
                 elif continuous_silence > self.silence_threshold:
                     # If there's been silence for more than the threshold
                     if current_partial and len(current_partial.split()) >= self.min_transcription_length:
-                        # Send the current partial transcription as a full transcription
-                        logging.info(f"Silence detected, sending partial as full: {current_partial}")
-                        if self.transcription_callback:
-                            self.transcription_callback(current_partial, is_partial=False)
-                    else:
-                        # If no valid partial transcription, just log the silence detection
-                        logging.info("Silence detected, no valid transcription to send")
+                        # Add trailing silence
+                        silence_padding = np.zeros(trailing_silence_samples, dtype=np.int16)
+                        full_audio = np.concatenate([
+                            np.concatenate([chunk for chunk, _ in self.ring_buffer]), 
+                            silence_padding
+                        ])
+                        
+                        self.recognizer.AcceptWaveform(full_audio.tobytes())
+                        final_result = json.loads(self.recognizer.FinalResult())
+                        
+                        if final_result['text']:
+                            logging.info(f"Final transcription with trailing silence: {final_result['text']}")
+                            if self.transcription_callback:
+                                self.transcription_callback(final_result['text'], is_partial=False)
+                        else:
+                            logging.info(f"No final transcription, sending partial as full: {current_partial}")
+                            if self.transcription_callback:
+                                self.transcription_callback(current_partial, is_partial=False)
+                    #else:
+                        #logging.info("Silence detected, no valid transcription to send")
                     
                     self.ring_buffer.clear()
                     continuous_silence = 0
@@ -101,6 +141,8 @@ class AudioTranscriber:
 
             except queue.Empty:
                 continue
+            except Exception as e:
+                logging.error(f"Error processing audio: {e}")
 
     def list_audio_devices(self):
         devices = sd.query_devices()
@@ -128,7 +170,7 @@ class AudioTranscriber:
         self.stop_event.clear()
         self.pause_event.clear()
 
-        self.audio_thread = threading.Thread(target=self.process_audio)
+        self.audio_thread = threading.Thread(target=self.process_audio, daemon=True)
         self.audio_thread.start()
         logging.info(f"Started audio thread with device {device_index}")
 
@@ -165,3 +207,10 @@ class AudioTranscriber:
     def resume_transcribing(self):
         self.pause_event.clear()
         logging.info("Audio transcription resumed")
+
+    def get_blackhole_16ch_index(self):
+        devices = sd.query_devices()
+        for i, device in enumerate(devices):
+            if "BlackHole 16ch" in device['name'] and device['max_input_channels'] > 0:
+                return i
+        return None  # If BlackHole 16ch is not found

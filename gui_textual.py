@@ -20,11 +20,12 @@ handler.setFormatter(formatter)
 logging.basicConfig(level=logging.DEBUG, handlers=[handler])
 import uuid
 from datetime import datetime
-
+import numpy as np
 from textual.app import App, ComposeResult
-from textual.widgets import Header, Footer, Static, Input, Button, ListView, ListItem, Label, Markdown, TextArea, RadioSet, RadioButton, Select, RichLog
+from textual.widgets import Header, Footer, Static, Input, Button, ListView, ListItem, Label, Markdown, TextArea, RadioSet, RadioButton, Select, RichLog, ProgressBar
+from textual.widget import Widget
 from textual.reactive import reactive
-
+from textual_slider import Slider
 from transcribe_audio import AudioTranscriber
 from ollama_api import OllamaAPI
 import sounddevice as sd
@@ -35,6 +36,8 @@ from textual.binding import Binding
 import re
 from textual.message import Message
 from rich.markdown import Markdown as RichMarkdown
+from transcribe_audio import AudioTranscriber
+from transcribe_audio_google_cloud import AudioTranscriberGoogleCloud
 
 class UpdateOllamaDisplay(Message):
     def __init__(self, conversation: str, status: str):
@@ -42,7 +45,44 @@ class UpdateOllamaDisplay(Message):
         self.status = status
         super().__init__()
 
+class AudioLevelMonitor(Static):
+    levels = reactive(([float('-inf')] * 2, [float('-inf')] * 2))
+
+    def on_mount(self):
+        self.set_interval(1/10, self.update_levels)  # Update at 10 fps instead of 30
+        self.set_interval(3, self.reset_peaks)
+
+    def update_levels(self):
+        if self.app.transcriber:
+            new_levels = self.app.transcriber.get_audio_levels()
+            if new_levels != self.levels:
+                self.levels = new_levels
+                self.refresh()
+
+    def reset_peaks(self):
+        if self.app.transcriber:
+            self.app.transcriber.reset_peak_levels()
+
+    def normalize_db(self, db_value):
+        if db_value <= -60:
+            return 0
+        return min(max(int((db_value + 60) * 50 / 60), 0), 50)
+
+    def render(self):
+        bars = []
+        for i, (level, peak) in enumerate(zip(*self.levels)):
+            normalized = self.normalize_db(level)
+            peak_normalized = self.normalize_db(peak)
+            
+            bar = f"Ch{i+1}: [{'#' * normalized}{'-' * (peak_normalized - normalized)}{' ' * (50 - peak_normalized)}] {level:.1f}dB ({peak:.1f}dB)"
+            bars.append(bar)
+        return "\n".join(bars)
+    
 class RealtimeTranscribeToAI(App):
+    TRANSCRIPTION_OPTIONS = [
+        ("Vosk", "vosk"),
+        ("Google Cloud", "google_cloud")
+    ]
     CSS_PATH = "gui_textual.tcss"
     BINDINGS = [Binding("ctrl+q", "quit", "Quit")]
     CSS = """
@@ -129,6 +169,13 @@ class RealtimeTranscribeToAI(App):
         height: auto;
         margin: 1;
     }
+    AudioLevelMonitor {
+        height: 3;
+        border: solid green;
+    }
+    #gain_slider {
+        width: 50;
+    }
     """
     # add new window
     
@@ -141,6 +188,7 @@ class RealtimeTranscribeToAI(App):
     is_capture_paused = reactive(False)
     history = reactive({})
     current_session_id = reactive("")
+    gain = reactive(1.0)
     PROMPT_OPTIONS = [
         ("Default (with coding)", "default"),
         ("Non-coding Interview", "non_coding_interview"),
@@ -183,6 +231,8 @@ class RealtimeTranscribeToAI(App):
             yield RadioButton("Rust", id="rust")
             yield RadioButton("C++", id="cpp")
         yield Button(label="Reprocess using specified coding language", id="reprocess_with_language")
+        yield AudioLevelMonitor()
+        yield Slider(value=50, min=0, max=100, step=1, id="gain_slider")
         with VerticalScroll(id="log-pane"):
             yield Static("", id="log", classes="lbl3")
         yield Select(
@@ -190,13 +240,19 @@ class RealtimeTranscribeToAI(App):
             id="prompt_selector",
             allow_blank=False
         )
-        
+        yield Select(
+            options=self.TRANSCRIPTION_OPTIONS,
+            id="transcription_selector",
+            allow_blank=False
+        )
         yield Select(id="device_selector", prompt="Select an audio input device", options=self.PROMPT_DEVICE_OPTIONS, allow_blank=True)
         yield Footer()
 
     def on_mount(self):
+        self.transcriber = None
+        self.transcription_method = "vosk"  # Default to Vosk
+        self.audio_monitor = self.query_one(AudioLevelMonitor)
         self.devices = self.list_audio_devices()
-        
         self.transcriber = AudioTranscriber()
         self.ollama_api = OllamaAPI(host="http://192.168.1.81:11434", model="llama3.1:latest")
         self.stop_event = False
@@ -213,9 +269,15 @@ class RealtimeTranscribeToAI(App):
         self.query_one("#log-pane", VerticalScroll).border_title = "Log"
         # Set up signal handling
         signal.signal(signal.SIGINT, self.handle_interrupt)
-        self.update_thread = Thread(target=self.update_content, daemon=True)
-        self.update_thread.start()
+        #self.update_content_timer = self.set_interval(1/30, self.update_content)
     
+    def on_slider_changed(self, event: Slider.Changed) -> None:
+        if event.slider.id == "gain_slider":
+            # Map 0-100 to a more useful gain range, e.g., 0.1 to 10
+            self.gain = 0.1 * (10 ** (event.value / 50))
+            if self.transcriber:
+                self.transcriber.set_gain(self.gain)
+
     def sanitize_markdown(self, text):
         # Remove any potential HTML tags
         text = re.sub('<[^<]+?>', '', text)
@@ -246,9 +308,10 @@ class RealtimeTranscribeToAI(App):
             self.query_one("#ollama", Static).update(markdown_content)
     
     def on_update_ollama_display(self, message: UpdateOllamaDisplay):
-        self.ollama_conversation = message.conversation
-        self.processing_status = message.status
-        self.update_ollama_display()
+        if message.conversation != self.ollama_conversation or message.status != self.processing_status:
+            self.ollama_conversation = message.conversation
+            self.processing_status = message.status
+            self.update_ollama_display()
 
     #def update_ollama_display(self):
         #logging.info(self.ollama_conversation)
@@ -284,10 +347,21 @@ class RealtimeTranscribeToAI(App):
                 for i, device in enumerate(devices)]
 
     def on_select_changed(self, event: Select.Changed) -> None:
-        if event.select.id == "device_selector":
+        if event.select.id == "transcription_selector":
+            self.transcription_method = event.value
+            if self.transcription_method == "vosk":
+                self.transcriber = AudioTranscriber()
+            elif self.transcription_method == "google_cloud":
+                self.transcriber = AudioTranscriberGoogleCloud()
+            self.log(f"Changed transcription method to: {self.transcription_method}")
+        elif event.select.id == "device_selector":
             selected_device_index = event.value
             self.selected_device = self.devices[selected_device_index]
             logging.info(f"Selected device: {self.selected_device}")
+
+            #blackhole_index = self.transcriber.get_blackhole_16ch_index()
+            #device_index = blackhole_index if blackhole_index is not None else selected_device_index
+
             #self.query_one("#device").update(f"Selected Device: {self.selected_device}")
             self.transcribe_thread = Thread(target=self.start_transcribing, args=(selected_device_index,), daemon=True)
             self.transcribe_thread.start()
@@ -317,11 +391,14 @@ class RealtimeTranscribeToAI(App):
         self.call_from_thread(update)
 
     def start_transcribing(self, device_index):
-        self.transcriber.start_transcribing(device_index=device_index, transcription_callback=self.transcription_callback)
+        if self.transcriber:
+            self.transcriber.start_transcribing(device_index=device_index, transcription_callback=self.transcription_callback)
+        else:
+            logging.error("No transcriber selected")
 
     def update_content(self):
         while not self.stop_event:
-            if not self.is_paused:
+            if not self.is_paused and self.transcriber:
                 conversation = self.ollama_api.get_responses()
                 status = self.processing_status
                 self.post_message(UpdateOllamaDisplay(conversation, status))
@@ -339,17 +416,18 @@ class RealtimeTranscribeToAI(App):
                 #self.query_one(Markdown).update("""stuff""")
                 
                 should_process, stats = self.ollama_api.should_process()
-                logging.info(f"Should process: {should_process}")
+                #logging.info(f"Should process: {should_process}")
                 if should_process:
                     self.processing_status = "Processing transcription..."
                     response = self.ollama_api.process_transcription()
                     self.ollama_conversation = self.ollama_api.get_responses()
                     self.history[self.current_session_id]["ai_responses"] = self.ollama_conversation
                     #self.update_ollama_display()
-                    logging.info(f"Updating content - Response: {self.ollama_conversation}")
+                    #logging.info(f"Updating content - Response: {self.ollama_conversation}")
                     self.processing_status = ""
                     #self.query_one(Markdown).update(self.history[self.current_session_id]["ai_responses"])
-            
+            #self.audio_monitor.update_levels()
+            #time.sleep(1/30)  # Update at 30 fps
             time.sleep(0.5)  # Reduced frequency of updates
         logging.info("Update content thread stopped.")
 
