@@ -49,9 +49,17 @@ class UpdateOllamaDisplay(Message):
 
 # Create a custom footer with AudioLevelMonitor
 class CustomFooter(Footer):
+    def __init__(self):
+        super().__init__()
+        self.status_message = Static("Idle", id="ai-status")
+
     def compose(self):
-        yield Static("Status", id="footer-left")
+        yield self.status_message
+        yield Static("", id="footer-spacer")
         yield AudioLevelMonitor(id="audio-monitor")
+
+    def update_status(self, message: str):
+        self.status_message.update(message)
 
 class AudioLevelMonitor(Static):
     levels = reactive(([float('-inf')] * 2, [float('-inf')] * 2))
@@ -199,11 +207,17 @@ class RealtimeTranscribeToAI(App):
         height: auto;
         padding: 1;
     }
-
-    #footer-left {
-        width: 1fr;
+    #ai-status {
+        width: auto;
+        min-width: 30;
+        padding-left: 1;
         content-align: left middle;
+        background: $boost;
     }
+    #footer-spacer {
+        width: 1fr;
+    }
+
 
     #audio-monitor {
         width: auto;
@@ -227,6 +241,7 @@ class RealtimeTranscribeToAI(App):
     history = reactive({})
     current_session_id = reactive("")
     gain = reactive(1.0)
+
     PROMPT_OPTIONS = [
         ("Default (with coding)", "default"),
         ("Non-coding Interview", "non_coding_interview"),
@@ -236,6 +251,7 @@ class RealtimeTranscribeToAI(App):
         (f"{i}: {device['name']} (in: {device['max_input_channels']}, out: {device['max_output_channels']})", i)
         for i, device in enumerate(devices)
     ]
+
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -304,7 +320,8 @@ class RealtimeTranscribeToAI(App):
         self.audio_monitor = self.query_one(AudioLevelMonitor)
         self.devices = self.list_audio_devices()
         self.transcriber = AudioTranscriber()
-        self.ollama_api = OllamaAPI(host="http://192.168.1.81:11434", model="llama3.1:latest")
+        self.update_ai_status("Idle")
+        self.ollama_api = OllamaAPI(host="http://192.168.1.81:11434", model="llama3.1:latest", app=self)
         self.stop_event = False
         self.update_thread = Thread(target=self.update_content, daemon=True)
         self.update_thread.start()
@@ -321,6 +338,10 @@ class RealtimeTranscribeToAI(App):
         signal.signal(signal.SIGINT, self.handle_interrupt)
         #self.update_content_timer = self.set_interval(1/30, self.update_content)
     
+    def update_ai_status(self, status: str):
+        footer = self.query_one(CustomFooter)
+        footer.update_status(status)
+
     def on_slider_changed(self, event: Slider.Changed) -> None:
         if event.slider.id == "gain_slider":
             # Map 0-100 to a more useful gain range, e.g., 0.1 to 10

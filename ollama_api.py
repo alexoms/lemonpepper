@@ -3,7 +3,7 @@ import ollama
 from threading import Lock
 
 class OllamaAPI:
-    def __init__(self, host="http://localhost:11434", model="llama2"):
+    def __init__(self, host="http://localhost:11434", model="llama2", app=None):
         self.model = model
         self.client = ollama.Client(host=host)
         self.transcription_buffer = []
@@ -24,7 +24,9 @@ class OllamaAPI:
             "non_coding_interview": self.non_coding_interview_prompt
         }
         self.current_prompt = "default"
-        
+        self.app = app
+
+    # fix mistranscriptions using the context of the transcript and based on potential phonetic issues. I asked it to replace transcribed words that don't make sense with "[unintelligable]"        
 
     def default_prompt(self, transcription):
         return (
@@ -133,9 +135,11 @@ class OllamaAPI:
             #    return "No new content to process."
 
             self.last_processed_transcription = full_transcription.strip()
-        
+        self.app.update_ai_status("Prompting AI...")
         prompt = self.prompts[self.current_prompt](full_transcription)
+        self.app.update_ai_status("Waiting for AI response...")
         response = self.generate_response(prompt)
+        self.app.update_ai_status("AI response received")
         self.last_processed_time = time.time()
         self.response_history.insert(0, f"AI: {response}")
         return response
