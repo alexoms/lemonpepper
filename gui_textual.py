@@ -203,6 +203,9 @@ class RealtimeTranscribeToAI(App):
         background: green;
         
     }
+    #user_input {
+        border: solid blue;
+    }
     #audio-device-settings {
         height: auto;
         border: solid pink;
