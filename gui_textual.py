@@ -174,18 +174,23 @@ class RealtimeTranscribeToAI(App):
         column-span: 2;
         row-span: 9;
     }
-    #logging-pane {
-        layout: grid;
-        column-span: 1;
-        row-span: 1;
+
+    #log-tab-pane {
+        
     }
-    #log-pane {
+    #log-vertical-scroll > Static {
+       
+    }
+    #log-vertical-scroll {
         border: solid orange;
-        height: 100%;
-        overflow-y: auto;
-        column-span: 1;
-        row-span: 1;
+        
+        width: 100%;
+
     }
+    #log {
+        
+    }
+
     #session-list {
         column-span: 1;
         row-span: 1;
@@ -352,11 +357,49 @@ class RealtimeTranscribeToAI(App):
                         #     id="prompt_selector",
                         #     allow_blank=False
                         # )
-            with TabPane("Log", id="logging-pane"):
-                with VerticalScroll(id="log-pane"):
-                    yield Static("", id="log", classes="lbl3")                        
+            with TabPane("Log", id="log-tab-pane"):
+                with VerticalScroll(id="log-vertical-scroll"):
+                    yield Static("Awaiting logging information", id="log")       
+                             
             with TabPane("About", id="about"):
                 yield Static("""
+888      888      888b     d888       8888888b.                                          888          8888888888                   d8b                                    d8b                         
+888      888      8888b   d8888       888   Y88b                                         888          888                          Y8P                                    Y8P                         
+888      888      88888b.d88888       888    888                                         888          888                                                                                             
+888      888      888Y88888P888       888   d88P 888d888  .d88b.  88888b.d88b.  88888b.  888888       8888888    88888b.   .d88b.  888 88888b.   .d88b.   .d88b.  888d888 888 88888b.   .d88b.        
+888      888      888 Y888P 888       8888888P"  888P"   d88""88b 888 "888 "88b 888 "88b 888          888        888 "88b d88P"88b 888 888 "88b d8P  Y8b d8P  Y8b 888P"   888 888 "88b d88P"88b       
+888      888      888  Y8P  888       888        888     888  888 888  888  888 888  888 888          888        888  888 888  888 888 888  888 88888888 88888888 888     888 888  888 888  888       
+888      888      888   "   888       888        888     Y88..88P 888  888  888 888 d88P Y88b.        888        888  888 Y88b 888 888 888  888 Y8b.     Y8b.     888     888 888  888 Y88b 888       
+88888888 88888888 888       888       888        888      "Y88P"  888  888  888 88888P"   "Y888       8888888888 888  888  "Y88888 888 888  888  "Y8888   "Y8888  888     888 888  888  "Y88888       
+                                                                                888                                            888                                                          888       
+                                                                                888                                       Y8b d88P                                                     Y8b d88P       
+                                                                                888                                        "Y88P"                                                       "Y88P"        
+ .d888                               d8888               888 d8b                                                                                                                                      
+d88P"                               d88888               888 Y8P                                                                                                                                      
+888                                d88P888               888                                                                                                                                          
+888888  .d88b.  888d888           d88P 888 888  888  .d88888 888  .d88b.                                                                                                                              
+888    d88""88b 888P"            d88P  888 888  888 d88" 888 888 d88""88b                                                                                                                             
+888    888  888 888             d88P   888 888  888 888  888 888 888  888                                                                                                                             
+888    Y88..88P 888            d8888888888 Y88b 888 Y88b 888 888 Y88..88P                                                                                                                             
+888     "Y88P"  888           d88P     888  "Y88888  "Y88888 888  "Y88P"                                                                                                                              
+                                                                                                                                                                                                      
+                                                                                                                                                                                                      
+                                                                                                                                                                                                      
+888                                                                                                                                                                                                   
+888                                                                                                                                                                                                   
+888                                                                                                                                                                                                   
+88888b.  888  888                                                                                                                                                                                     
+888 "88b 888  888                                                                                                                                                                                     
+888  888 888  888                                                                                                                                                                                     
+888 d88P Y88b 888                                                                                                                                                                                     
+88888P"   "Y88888                                                                                                                                                                                     
+              888                                                                                                                                                                                     
+         Y8b d88P                                                                                                                                                                                     
+          "Y88P"                                                                                                                               
+                                                                                                                                                                                                      
+                                                                                                                                   
+                             
+                           
   _   _       _     _       _                     ___       _                       _           _   ____                _            _         _     _     ____ 
  | | | |_ __ (_) __| | __ _| |_ _   _ _ __ ___   |_ _|_ __ | |_ ___  __ _ _ __ __ _| |_ ___  __| | |  _ \ _ __ ___   __| |_   _  ___| |_ ___  | |   | |   / ___|
  | | | | '_ \| |/ _` |/ _` | __| | | | '_ ` _ \   | || '_ \| __/ _ \/ _` | '__/ _` | __/ _ \/ _` | | |_) | '__/ _ \ / _` | | | |/ __| __/ __| | |   | |  | |    
@@ -365,7 +408,12 @@ class RealtimeTranscribeToAI(App):
                                                                     |___/                                                                                       
 All Rights Reserved
 Unidatum Integrated Products LLC © 2024
-http://www.unidatum.com/""")
+http://www.unidatum.com/
+
+This is a command-line tool for transcribing audio feeds and packaging the transcriptions 
+into pre-made large language model (LLM) prompt templates and capturing the responses from the LLMs.    
+
+                             """)
 
     def on_mount(self):
         # Set the first prompt option as default
@@ -395,10 +443,10 @@ http://www.unidatum.com/""")
         self.start_new_session()
         self.set_timer(0.1, self.update_device_selector)
         self.query_one("#transcription", TextArea).border_title = "Complete Transcription"
-        self.query_one("#left-pane", VerticalScroll).border_title = "AI Response"
+        self.query_one("#left-pane", VerticalScroll).border_title = "LLM Response"
         self.query_one("#partial", TextArea).border_title = "Partial Transcription"
-        self.query_one("#user_input", TextArea).border_title = "Send Chat Message to AI"
-        self.query_one("#log-pane", VerticalScroll).border_title = "Log"
+        self.query_one("#user_input", TextArea).border_title = "Include Custom Message with Transcription"
+        self.query_one("#log-vertical-scroll", VerticalScroll).border_title = "Log"
         self.query_one("#audio-device-settings", VerticalScroll).border_title = "Audio Device"
         self.query_one("#prompt-settings", VerticalScroll).border_title = "LLM Prompt Engineering"
         # Set up signal handling

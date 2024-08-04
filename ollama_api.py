@@ -135,13 +135,13 @@ class OllamaAPI:
             #    return "No new content to process."
 
             self.last_processed_transcription = full_transcription.strip()
-        self.app.update_ai_status("Prompting AI...")
+        self.app.update_ai_status("Prompting LLM...")
         prompt = self.prompts[self.current_prompt](full_transcription)
-        self.app.update_ai_status("Waiting for AI response...")
+        self.app.update_ai_status("Waiting for LLM response...")
         response = self.generate_response(prompt)
         self.app.update_ai_status("AI response received")
         self.last_processed_time = time.time()
-        self.response_history.insert(0, f"AI: {response}")
+        self.response_history.insert(0, f"LLM: {response}")
         return response
     
     def get_responses(self):
