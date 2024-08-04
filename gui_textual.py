@@ -22,7 +22,7 @@ import uuid
 from datetime import datetime
 import numpy as np
 from textual.app import App, ComposeResult
-from textual.widgets import Header, Footer, Static, Input, Button, ListView, ListItem, Label, Markdown, TextArea, RadioSet, RadioButton, Select, RichLog, ProgressBar
+from textual.widgets import Header, Footer, Static, Input, Button, ListView, ListItem, Label, Markdown, TextArea, RadioSet, RadioButton, Select, RichLog, ProgressBar, TabbedContent, TabPane
 from textual.widget import Widget
 from textual.reactive import reactive
 from textual_slider import Slider
@@ -69,7 +69,7 @@ class AudioLevelMonitor(Static):
         self.set_interval(3, self.reset_peaks)
 
     def update_levels(self):
-        if self.app.transcriber:
+        if hasattr(self.app, 'transcriber') and self.app.transcriber:
             new_levels = self.app.transcriber.get_audio_levels()
             if new_levels != self.levels:
                 self.levels = new_levels
@@ -116,6 +116,11 @@ class RealtimeTranscribeToAI(App):
     BINDINGS = [Binding("ctrl+q", "quit", "Quit")]
     CSS = """
     Screen {
+        layout: grid;
+        grid-size: 1;
+        grid-gutter: 1;
+    }
+    #home {
         layout: grid;
         grid-size: 3;
         grid-gutter: 1;
@@ -165,12 +170,17 @@ class RealtimeTranscribeToAI(App):
         column-span: 2;
         row-span: 9;
     }
+    #logging-pane {
+        layout: grid;
+        column-span: 1;
+        row-span: 1;
+    }
     #log-pane {
-        border: solid blue;
+        border: solid orange;
         height: 100%;
         overflow-y: auto;
-        column-span: 2;
-        row-span: 4;
+        column-span: 1;
+        row-span: 1;
     }
     #session-list {
         column-span: 1;
@@ -192,6 +202,21 @@ class RealtimeTranscribeToAI(App):
     .capture-running {
         background: green;
         
+    }
+    #audio-device-settings {
+        height: auto;
+        border: solid pink;
+        overflow-y: auto;
+        column-span: 1;
+        row-span: 1;
+    }
+    
+    #prompt-settings {
+        height: auto;
+        border: solid cyan;
+        overflow-y: auto;
+        column-span: 1;
+        row-span: 1;
     }
     #device_selector {
         width: 100%;
@@ -255,71 +280,103 @@ class RealtimeTranscribeToAI(App):
 
     def compose(self) -> ComposeResult:
         yield Header()
-        #with Container(id="app-grid"):
-        with VerticalScroll(id="left-pane"):
-            #yield RichLog(id="ollama")
-            yield Static(id="ollama")
-            yield Markdown()
-        #yield Static(id="transcription")
-        yield TextArea(id="transcription", language="markdown")
-        yield TextArea(id="partial", language="markdown")
-        #yield Static(id="partial")
-        #yield Static(id="device")
-        yield ListView(id="session_list")
-
-        with Horizontal():
-            yield Button(label="Pause Processing", id="pause_button", classes="not-paused", disabled=False)
-            yield Button(label="Pause Capture", id="pause_capture_button", classes="capture-running", disabled=False)
-            yield Button(label="Clear", id="clear_button", disabled=False)
-            yield Button(label="Add Detailed Solution Prompt", id="add_solution_prompt", disabled=False)
-            yield Button(label="Resubmit Transcription", id="resubmit_transcription", disabled=False)
-        
-        with Horizontal():
-            yield TextArea(id="user_input")
-            yield Button(label="Submit", id="submit_user_input", variant="primary")
-        
-        with Horizontal():
-            with RadioSet(id="coding_language"):
-                yield RadioButton("No code involved", id="no_code", value=True)
-                yield RadioButton("Python", id="python")
-                yield RadioButton("JavaScript", id="javascript")
-                yield RadioButton("Java JDK 1.8", id="java_jdk_1_8")
-                yield RadioButton("Rust", id="rust")
-                yield RadioButton("C++", id="cpp")
-            yield Button(label="Reprocess using specified coding language", id="reprocess_with_language")
-        
-        with Vertical():
-            #yield AudioLevelMonitor()
-            yield Slider(value=50, min=0, max=100, step=1, id="gain_slider")
-        
-        
-        
-        with Vertical():
-            with Horizontal():
-                yield Select(
-                    options=self.PROMPT_OPTIONS,
-                    id="prompt_selector",
-                    allow_blank=False
-                )
-                yield Select(
-                    options=self.TRANSCRIPTION_OPTIONS,
-                    id="transcription_selector",
-                    allow_blank=False
-                )
-            yield Select(id="device_selector", prompt="Select an audio input device", options=self.PROMPT_DEVICE_OPTIONS, allow_blank=True)
-        
-        with VerticalScroll(id="log-pane"):
-            yield Static("", id="log", classes="lbl3")
-        
         yield CustomFooter()
-        #yield Footer()
+        with TabbedContent(initial="home"):
+            with TabPane("Home", id="home"):
+                #with Container(id="app-grid"):
+                with VerticalScroll(id="left-pane"):
+                    #yield RichLog(id="ollama")
+                    yield Static(id="ollama")
+                    yield Markdown()
+                #yield Static(id="transcription")
+                yield TextArea(id="transcription", language="markdown")
+                yield TextArea(id="partial", language="markdown")
+                #yield Static(id="partial")
+                #yield Static(id="device")
+                yield ListView(id="session_list")
+
+                with Horizontal():
+                    yield Button(label="Pause Processing", id="pause_button", classes="not-paused", disabled=False)
+                    yield Button(label="Pause Capture", id="pause_capture_button", classes="capture-running", disabled=False)
+                    yield Button(label="Clear", id="clear_button", disabled=False)
+                    yield Button(label="Add Detailed Solution Prompt", id="add_solution_prompt", disabled=False)
+                    yield Button(label="Resubmit Transcription", id="resubmit_transcription", disabled=False)
+                
+                with Horizontal():
+                    yield TextArea(id="user_input")
+                    yield Button(label="Submit", id="submit_user_input", variant="primary")
+                
+                with Horizontal():
+                    with RadioSet(id="coding_language"):
+                        yield RadioButton("No code involved", id="no_code", value=True)
+                        yield RadioButton("Python", id="python")
+                        yield RadioButton("JavaScript", id="javascript")
+                        yield RadioButton("Java JDK 1.8", id="java_jdk_1_8")
+                        yield RadioButton("Rust", id="rust")
+                        yield RadioButton("C++", id="cpp")
+                    yield Button(label="Reprocess using specified coding language", id="reprocess_with_language")
+                
+                with Vertical():
+                    #yield AudioLevelMonitor()
+                    yield Slider(value=50, min=0, max=100, step=1, id="gain_slider")
+                    
+  
+            with TabPane("Settings", id="settings"):
+                    with VerticalScroll(id="audio-device-settings"):
+                        yield Static("Audio input device to transcribe: ")
+                        yield Select(id="device_selector", prompt="Select an audio input device", options=self.PROMPT_DEVICE_OPTIONS, allow_blank=True)
+                        yield Static("Audio transcriber to use: ")
+                        with RadioSet(id="transcription_selector"):
+                                for i, (label, value) in enumerate(self.TRANSCRIPTION_OPTIONS):
+                                    yield RadioButton(label, id=f"transcription_{value}", value=(i == 0))
+                        # yield Select(
+                        #     options=self.TRANSCRIPTION_OPTIONS,
+                        #     id="transcription_selector",
+                        #     allow_blank=False
+                        # )
+                    with VerticalScroll(id="prompt-settings"):
+                        yield Static("AI Prompt to use: ")
+                        with RadioSet(id="prompt_selector"):
+                            for label, value in self.PROMPT_OPTIONS:
+                                yield RadioButton(label, id=f"prompt_{value}")
+                        # yield Select(
+                        #     options=self.PROMPT_OPTIONS,
+                        #     id="prompt_selector",
+                        #     allow_blank=False
+                        # )
+            with TabPane("Log", id="logging-pane"):
+                with VerticalScroll(id="log-pane"):
+                    yield Static("", id="log", classes="lbl3")                        
+            with TabPane("About", id="about"):
+                yield Static("""
+  _   _       _     _       _                     ___       _                       _           _   ____                _            _         _     _     ____ 
+ | | | |_ __ (_) __| | __ _| |_ _   _ _ __ ___   |_ _|_ __ | |_ ___  __ _ _ __ __ _| |_ ___  __| | |  _ \ _ __ ___   __| |_   _  ___| |_ ___  | |   | |   / ___|
+ | | | | '_ \| |/ _` |/ _` | __| | | | '_ ` _ \   | || '_ \| __/ _ \/ _` | '__/ _` | __/ _ \/ _` | | |_) | '__/ _ \ / _` | | | |/ __| __/ __| | |   | |  | |    
+ | |_| | | | | | (_| | (_| | |_| |_| | | | | | |  | || | | | ||  __/ (_| | | | (_| | ||  __/ (_| | |  __/| | | (_) | (_| | |_| | (__| |_\__ \ | |___| |__| |___ 
+  \___/|_| |_|_|\__,_|\__,_|\__|\__,_|_| |_| |_| |___|_| |_|\__\___|\__, |_|  \__,_|\__\___|\__,_| |_|   |_|  \___/ \__,_|\__,_|\___|\__|___/ |_____|_____\____|
+                                                                    |___/                                                                                       
+All Rights Reserved
+Unidatum Integrated Products LLC © 2024
+http://www.unidatum.com/""")
 
     def on_mount(self):
-        self.transcriber = None
-        self.transcription_method = "vosk"  # Default to Vosk
+        # Set the first prompt option as default
+        first_prompt_id = f"prompt_{self.PROMPT_OPTIONS[0][1]}"
+        self.query_one(f"#{first_prompt_id}", RadioButton).value = True
+        
+        # Set the first transcription option as default
+        first_transcription_id = f"transcription_{self.TRANSCRIPTION_OPTIONS[0][1]}"
+        self.query_one(f"#{first_transcription_id}", RadioButton).value = True
+        
+        # Initialize the transcription method
+        #self.transcriber = None
+        #self.transcription_method = "vosk"  # Default to Vosk
+        self.transcription_method = self.TRANSCRIPTION_OPTIONS[0][1]
+        self.initialize_transcriber()
+
         self.audio_monitor = self.query_one(AudioLevelMonitor)
         self.devices = self.list_audio_devices()
-        self.transcriber = AudioTranscriber()
+        #self.transcriber = AudioTranscriber()
         self.update_ai_status("Idle")
         self.ollama_api = OllamaAPI(host="http://192.168.1.81:11434", model="llama3.1:latest", app=self)
         self.stop_event = False
@@ -334,10 +391,30 @@ class RealtimeTranscribeToAI(App):
         self.query_one("#partial", TextArea).border_title = "Partial Transcription"
         self.query_one("#user_input", TextArea).border_title = "Send Chat Message to AI"
         self.query_one("#log-pane", VerticalScroll).border_title = "Log"
+        self.query_one("#audio-device-settings", VerticalScroll).border_title = "Audio Device"
+        self.query_one("#prompt-settings", VerticalScroll).border_title = "LLM Prompt Engineering"
         # Set up signal handling
         signal.signal(signal.SIGINT, self.handle_interrupt)
         #self.update_content_timer = self.set_interval(1/30, self.update_content)
     
+    def initialize_transcriber(self):
+        if self.transcription_method == "vosk":
+            self.transcriber = AudioTranscriber()
+        elif self.transcription_method == "google_cloud":
+            self.transcriber = AudioTranscriberGoogleCloud()
+        self.log(f"Initialized transcriber: {self.transcription_method}")
+
+    def on_radio_set_changed(self, event: RadioSet.Changed) -> None:
+        if event.radio_set.id == "prompt_selector":
+            selected_value = event.pressed.id.split("_", 1)[1]  # Extract value from radio button id
+            self.ollama_api.set_prompt(selected_value)
+            self.log(f"Changed prompt to: {event.pressed.label}")
+        elif event.radio_set.id == "transcription_selector":
+            selected_value = event.pressed.id.split("_", 1)[1]
+            self.transcription_method = selected_value
+            self.initialize_transcriber()
+            self.log(f"Changed transcription method to: {event.pressed.label}")
+
     def update_ai_status(self, status: str):
         footer = self.query_one(CustomFooter)
         footer.update_status(status)
