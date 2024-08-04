@@ -31,13 +31,15 @@ from ollama_api import OllamaAPI
 import sounddevice as sd
 import signal
 import time
-from textual.containers import Container, VerticalScroll, Horizontal
+from textual.containers import Container, VerticalScroll, Horizontal, Vertical
 from textual.binding import Binding
 import re
 from textual.message import Message
 from rich.markdown import Markdown as RichMarkdown
 from transcribe_audio import AudioTranscriber
 from transcribe_audio_google_cloud import AudioTranscriberGoogleCloud
+from rich.console import Console
+from rich.text import Text
 
 class UpdateOllamaDisplay(Message):
     def __init__(self, conversation: str, status: str):
@@ -45,11 +47,17 @@ class UpdateOllamaDisplay(Message):
         self.status = status
         super().__init__()
 
+# Create a custom footer with AudioLevelMonitor
+class CustomFooter(Footer):
+    def compose(self):
+        yield Static("Status", id="footer-left")
+        yield AudioLevelMonitor(id="audio-monitor")
+
 class AudioLevelMonitor(Static):
     levels = reactive(([float('-inf')] * 2, [float('-inf')] * 2))
 
     def on_mount(self):
-        self.set_interval(1/10, self.update_levels)  # Update at 10 fps instead of 30
+        self.set_interval(0.05, self.update_levels)  # Update at 20 fps
         self.set_interval(3, self.reset_peaks)
 
     def update_levels(self):
@@ -64,19 +72,32 @@ class AudioLevelMonitor(Static):
             self.app.transcriber.reset_peak_levels()
 
     def normalize_db(self, db_value):
-        if db_value <= -60:
+        min_db = -60
+        max_db = 0
+        if db_value <= min_db:
             return 0
-        return min(max(int((db_value + 60) * 50 / 60), 0), 50)
+        return min(max(int((db_value - min_db) * 50 / (max_db - min_db)), 0), 50)
 
     def render(self):
-        bars = []
+        result = Text()
         for i, (level, peak) in enumerate(zip(*self.levels)):
             normalized = self.normalize_db(level)
             peak_normalized = self.normalize_db(peak)
             
-            bar = f"Ch{i+1}: [{'#' * normalized}{'-' * (peak_normalized - normalized)}{' ' * (50 - peak_normalized)}] {level:.1f}dB ({peak:.1f}dB)"
-            bars.append(bar)
-        return "\n".join(bars)
+            bar = Text(f"C{i+1}:")
+            bar.append("[")
+            bar.append("#" * normalized, "green")
+            if peak_normalized > normalized:
+                bar.append("-" * (peak_normalized - normalized), "yellow")
+            bar.append(" " * (10 - max(normalized, peak_normalized)))
+            bar.append("]")
+            
+            result.append(bar)
+            if i < len(self.levels[0]) - 1:
+                result.append(" ")
+
+        result.append(f" L:{self.levels[0][0]:.0f}dB P:{self.levels[1][0]:.0f}dB")
+        return result
     
 class RealtimeTranscribeToAI(App):
     TRANSCRIPTION_OPTIONS = [
@@ -169,12 +190,29 @@ class RealtimeTranscribeToAI(App):
         height: auto;
         margin: 1;
     }
-    AudioLevelMonitor {
-        height: 3;
-        border: solid green;
-    }
+    
     #gain_slider {
-        width: 50;
+        width: auto;
+    }
+    Footer {
+        layout: horizontal;
+        height: auto;
+        padding: 1;
+    }
+
+    #footer-left {
+        width: 1fr;
+        content-align: left middle;
+    }
+
+    #audio-monitor {
+        width: auto;
+        min-width: 90;  # Adjust this value as needed
+        height: 100%;
+        border: none;
+        background: $boost;
+        color: $text;
+        content-align: right middle;
     }
     """
     # add new window
@@ -219,34 +257,46 @@ class RealtimeTranscribeToAI(App):
             yield Button(label="Clear", id="clear_button", disabled=False)
             yield Button(label="Add Detailed Solution Prompt", id="add_solution_prompt", disabled=False)
             yield Button(label="Resubmit Transcription", id="resubmit_transcription", disabled=False)
-
-        yield TextArea(id="user_input")
-        yield Button(label="Submit", id="submit_user_input", variant="primary")
         
-        with RadioSet(id="coding_language"):
-            yield RadioButton("No code involved", id="no_code", value=True)
-            yield RadioButton("Python", id="python")
-            yield RadioButton("JavaScript", id="javascript")
-            yield RadioButton("Java JDK 1.8", id="java_jdk_1_8")
-            yield RadioButton("Rust", id="rust")
-            yield RadioButton("C++", id="cpp")
-        yield Button(label="Reprocess using specified coding language", id="reprocess_with_language")
-        yield AudioLevelMonitor()
-        yield Slider(value=50, min=0, max=100, step=1, id="gain_slider")
+        with Horizontal():
+            yield TextArea(id="user_input")
+            yield Button(label="Submit", id="submit_user_input", variant="primary")
+        
+        with Horizontal():
+            with RadioSet(id="coding_language"):
+                yield RadioButton("No code involved", id="no_code", value=True)
+                yield RadioButton("Python", id="python")
+                yield RadioButton("JavaScript", id="javascript")
+                yield RadioButton("Java JDK 1.8", id="java_jdk_1_8")
+                yield RadioButton("Rust", id="rust")
+                yield RadioButton("C++", id="cpp")
+            yield Button(label="Reprocess using specified coding language", id="reprocess_with_language")
+        
+        with Vertical():
+            #yield AudioLevelMonitor()
+            yield Slider(value=50, min=0, max=100, step=1, id="gain_slider")
+        
+        
+        
+        with Vertical():
+            with Horizontal():
+                yield Select(
+                    options=self.PROMPT_OPTIONS,
+                    id="prompt_selector",
+                    allow_blank=False
+                )
+                yield Select(
+                    options=self.TRANSCRIPTION_OPTIONS,
+                    id="transcription_selector",
+                    allow_blank=False
+                )
+            yield Select(id="device_selector", prompt="Select an audio input device", options=self.PROMPT_DEVICE_OPTIONS, allow_blank=True)
+        
         with VerticalScroll(id="log-pane"):
             yield Static("", id="log", classes="lbl3")
-        yield Select(
-            options=self.PROMPT_OPTIONS,
-            id="prompt_selector",
-            allow_blank=False
-        )
-        yield Select(
-            options=self.TRANSCRIPTION_OPTIONS,
-            id="transcription_selector",
-            allow_blank=False
-        )
-        yield Select(id="device_selector", prompt="Select an audio input device", options=self.PROMPT_DEVICE_OPTIONS, allow_blank=True)
-        yield Footer()
+        
+        yield CustomFooter()
+        #yield Footer()
 
     def on_mount(self):
         self.transcriber = None

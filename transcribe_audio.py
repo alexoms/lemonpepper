@@ -32,10 +32,12 @@ class AudioTranscriber:
         self.min_transcription_length = 3  # Minimum number of words to consider a transcription valid
         logging.info("AudioTranscriber initialized with VAD")
         # New attributes for audio levels and gain
-        self.audio_levels = [0] * channels
+        self.audio_levels = [float('-inf')] * channels
+        self.lock = threading.Lock()
         self.peak_levels = [float('-inf')] * channels
         self.gain = 1.0
         self.silence_threshold_db = -60  # Adjust as needed
+        self.max_db = 0
 
     def set_gain(self, gain):
         self.gain = gain
@@ -44,7 +46,9 @@ class AudioTranscriber:
         return self.audio_levels, self.peak_levels
     
     def reset_peak_levels(self):
-        self.peak_levels = [float('-inf')] * self.channels
+        with self.lock:
+            self.peak_levels = list(self.audio_levels)  # Reset to current levels instead of -inf
+
     
     def audio_callback(self, indata, frames, time, status):
         if status:
@@ -54,12 +58,15 @@ class AudioTranscriber:
             indata = indata * self.gain
             # Calculate RMS for each channel
             rms_levels = [np.sqrt(np.mean(indata[:, i]**2)) for i in range(self.channels)]
-            # Convert to dB
+            # Convert to dB, avoiding log(0)
             db_levels = [20 * np.log10(max(level, 1e-7)) for level in rms_levels]
-            # Apply silence threshold
-            self.audio_levels = [max(level, self.silence_threshold_db) for level in db_levels]
-            # Update peak levels
-            self.peak_levels = [max(current, peak) for current, peak in zip(self.audio_levels, self.peak_levels)]
+            # Apply silence threshold and cap at max_db
+            db_levels = [min(max(level, self.silence_threshold_db), self.max_db) for level in db_levels]
+            
+            with self.lock:
+                self.audio_levels = db_levels
+                self.peak_levels = [max(current, peak) for current, peak in zip(db_levels, self.peak_levels)]
+            
             self.audio_queue.put(indata.copy())
 
     def process_audio(self):
