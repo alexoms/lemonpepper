@@ -139,7 +139,7 @@ class OllamaAPI:
         prompt = self.prompts[self.current_prompt](full_transcription)
         self.app.update_ai_status("Waiting for LLM response...")
         response = self.generate_response(prompt)
-        self.app.update_ai_status("AI response received")
+        self.app.update_ai_status("LLM response received")
         self.last_processed_time = time.time()
         self.response_history.insert(0, f"LLM: {response}")
         return response

@@ -120,7 +120,7 @@ class CustomFooter(Footer):
         
         if message == "Waiting for LLM response...":
             self.start_spinner()
-        elif message == "AI response received":
+        elif message == "LLM response received":
             self.stop_spinner()
             self.set_reset_timer()
             self.app.log(f"Set status to '{message}' and started timer")  # Debug print
@@ -400,6 +400,10 @@ class RealtimeTranscribeToAI(App):
         for i, device in enumerate(devices)
     ]
 
+    def __init__(self):
+        super().__init__()
+        self.devices = self.list_audio_devices()
+        self.selected_device = "No device selected"
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -527,6 +531,7 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
                              """)
 
     def on_mount(self):
+        
         # Set the first prompt option as default
         first_prompt_id = f"prompt_{self.PROMPT_OPTIONS[0][1]}"
         self.query_one(f"#{first_prompt_id}", RadioButton).value = True
@@ -563,6 +568,22 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
         # Set up signal handling
         signal.signal(signal.SIGINT, self.handle_interrupt)
         #self.update_content_timer = self.set_interval(1/30, self.update_content)
+        
+        # Find and set BlackHole 2ch as default if it exists
+        # blackhole_index = self.find_blackhole_2ch()
+        # if blackhole_index is not None:
+        #     self.selected_device = self.devices[blackhole_index]
+        #     self.log(f"Default audio device set to BlackHole 2ch (index: {blackhole_index})")
+            
+        #     # Update the device selector in the UI
+        #     device_selector = self.query_one("#device_selector", expect_type=Select)
+        #     device_selector.value = blackhole_index
+            
+        #     # Start transcribing with the selected device
+        #     self.transcribe_thread = Thread(target=self.start_transcribing, args=(blackhole_index,), daemon=True)
+        #     self.transcribe_thread.start()
+        # else:
+        #     self.log("BlackHole 2ch not found. Please select an audio device manually.")
     
     def get_shortcuts(self) -> dict[str, str]:
         return {binding.key: binding.description for binding in self.BINDINGS}
@@ -585,6 +606,13 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
             self.initialize_transcriber()
             self.log(f"Changed transcription method to: {event.pressed.label}")
 
+    def find_blackhole_2ch(self):
+        devices = sd.query_devices()
+        for i, device in enumerate(devices):
+            if "BlackHole 2ch" in device['name'] and device['max_input_channels'] > 0:
+                return i
+        return None
+    
     def action_copy_ai_response(self):
         self.copy_ai_response_to_clipboard()
 
@@ -690,7 +718,6 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
             # Existing code for prompt selection
             self.ollama_api.set_prompt(event.value)
             self.log(f"Changed prompt to: {event.value}")
-
 
     def transcription_callback(self, text, is_partial=False):
         def update():
@@ -863,6 +890,7 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
 
     def force_process_transcription(self):
         self.log("Processing transcription...")
+        self.update_ai_status("Waiting for LLM response...")
         response = self.ollama_api.process_transcription(force=True)
         self.ollama_conversation = self.ollama_api.get_responses()
         self.history[self.current_session_id]["ai_responses"] = self.ollama_conversation
