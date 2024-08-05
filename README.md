@@ -30,8 +30,8 @@ This application provides real-time audio transcription and analysis using Large
 
 1. Clone the repository:
    ```
-   git clone [repository-url]
-   cd [repository-name]
+   git clone https://github.com/alexoms/audioAI.git
+   cd audioAI
    ```
 
 2. Install required dependencies:
