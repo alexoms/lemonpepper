@@ -22,9 +22,7 @@ This application provides real-time audio transcription and analysis using Large
 - Vosk (for offline speech recognition)
 - Google Cloud SDK (for Google Cloud Speech-to-Text, optional)
 
-![Home](docs/images/screenshot_home.png)
-
-[Watch the demo video](docs/video/demo-realtimeaudioai.mp4)
+[![Watch the demo video](docs/images/screenshot_home.png)](https://youtu.be/X29zS82GMVk?hd=1 "Demo")
 
 ## Installation
 
