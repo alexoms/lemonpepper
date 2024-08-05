@@ -1,6 +1,8 @@
 import time
 import ollama
-from threading import Lock
+from threading import Lock, Thread
+from queue import Queue
+import logging
 
 class OllamaAPI:
     def __init__(self, host="http://localhost:11434", model="llama2", app=None):
@@ -25,6 +27,8 @@ class OllamaAPI:
         }
         self.current_prompt = "default"
         self.app = app
+        self.response_queue = Queue()
+        self.logger = logging.getLogger(__name__)
 
     # fix mistranscriptions using the context of the transcript and based on potential phonetic issues. I asked it to replace transcribed words that don't make sense with "[unintelligable]"        
 
@@ -80,10 +84,36 @@ class OllamaAPI:
         with self.lock:
             return "\n".join(self.transcription_buffer)
 
+    def generate_response_in_thread(self, prompt):
+        self.logger.info("Starting response generation in thread")
+        response = self.generate_response(prompt)  
+        self.logger.info(f"Response generated: {response[:100]}...")      
+        self.response_queue.put(response)
+        self.logger.info("Response put into queue") 
+        
+
+    def process_transcription_threaded(self, force=False):
+        with self.lock:
+            if not self.transcription_buffer:
+                return "No transcription to process."
+
+            full_transcription = " ".join(self.transcription_buffer)
+            self.last_processed_transcription = full_transcription.strip()
+
+        self.app.update_ai_status("Prompting LLM...")
+        prompt = self.prompts[self.current_prompt](full_transcription)
+        self.app.update_ai_status("Waiting for LLM response...")
+        
+        # Start the thread here
+        self.logger.info("Starting response generation thread")
+        thread = Thread(target=self.generate_response_in_thread, args=(prompt,), daemon=True)
+        thread.start()
+
     def generate_response(self, prompt):
         try:
             with self.lock:
                 full_prompt = "\n".join(self.conversation_history + [prompt])
+            self.logger.info(f"Sending prompt to Ollama: {prompt[:100]}...") 
             response = self.client.generate(model=self.model, prompt=full_prompt)
             
             with self.lock:
@@ -92,7 +122,7 @@ class OllamaAPI:
                 #self.response_history.insert(0, f"AI: {response['response']}")
                 if len(self.conversation_history) > 10:
                     self.conversation_history = self.conversation_history[-10:]
-            
+            self.logger.info(f"Received response from Ollama: {response['response'][:100]}...") 
             return response['response']
         except Exception as e:
             return f"Error calling Ollama API: {e}"

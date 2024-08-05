@@ -47,6 +47,11 @@ from rich.style import Style
 from textual.timer import Timer
 import threading
 
+class LLMResponseReceived(Message):
+    def __init__(self, response: str):
+        self.response = response
+        super().__init__()
+
 class UpdateOllamaDisplay(Message):
     def __init__(self, conversation: str, status: str):
         self.conversation = conversation
@@ -567,6 +572,8 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
         self.query_one("#prompt-settings", VerticalScroll).border_title = "LLM Prompt Engineering"
         # Set up signal handling
         signal.signal(signal.SIGINT, self.handle_interrupt)
+        self.queue_thread = Thread(target=self.check_for_llm_response, args=(), daemon=True)
+        self.queue_thread.start()
         #self.update_content_timer = self.set_interval(1/30, self.update_content)
         
         # Find and set BlackHole 2ch as default if it exists
@@ -646,10 +653,12 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
 
     def update_ollama_display(self):
         try:
+            self.log("Updating Ollama display")
             markdown_content = self.ollama_conversation
             #logging.info(markdown_content)
             #self.query_one(Markdown).update(markdown_content)
             md = RichMarkdown(markdown_content)
+            self.log(f"Updating Ollama display with content: {md[:200]}...")
             self.query_one("#ollama", Static).update(md)
         except Exception as e:
             logging.error(f"Error updating Markdown: {e}")
@@ -766,13 +775,15 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
                 should_process, stats = self.ollama_api.should_process()
                 #logging.info(f"Should process: {should_process}")
                 if should_process:
-                    self.processing_status = "Processing transcription..."
-                    response = self.ollama_api.process_transcription()
-                    self.ollama_conversation = self.ollama_api.get_responses()
-                    self.history[self.current_session_id]["ai_responses"] = self.ollama_conversation
+                    self.log("Calling process_transcription_threaded")
+                    self.ollama_api.process_transcription_threaded()
+                    self.log("Setting interval to check for LLM response in update_content")
+                    self.set_interval(0.1, self.check_for_llm_response)
+                    #response = self.ollama_api.process_transcription()
+                    #self.ollama_conversation = self.ollama_api.get_responses()
+                    #self.history[self.current_session_id]["ai_responses"] = self.ollama_conversation
                     #self.update_ollama_display()
                     #logging.info(f"Updating content - Response: {self.ollama_conversation}")
-                    self.processing_status = ""
                     #self.query_one(Markdown).update(self.history[self.current_session_id]["ai_responses"])
             #self.audio_monitor.update_levels()
             #time.sleep(1/30)  # Update at 30 fps
@@ -889,15 +900,32 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
             self.log("Please select a language before reprocessing.")
 
     def force_process_transcription(self):
-        self.log("Processing transcription...")
-        self.update_ai_status("Waiting for LLM response...")
-        response = self.ollama_api.process_transcription(force=True)
+        self.log("Forcing transcription processing")
+        self.ollama_api.process_transcription_threaded(force=True)
+        self.log("Setting interval to check for LLM response")
+        self.set_interval(0.1, self.check_for_llm_response)
+    
+    def check_for_llm_response(self) -> None:
+        self.log("Checking for LLM response")
+        if not self.ollama_api.response_queue.empty():
+            self.log("Response found in queue")
+            response = self.ollama_api.response_queue.get()
+            self.log(f"Retrieved response from queue: {response[:100]}...")
+            self.post_message(LLMResponseReceived(response))
+            return False  # Stop the interval
+        self.log("No response in queue yet")
+        return True  # Continue checking
+
+    def on_llm_response_received(self, message: LLMResponseReceived) -> None:
+        self.log("LLM response received, updating display")
+        self.log(f"Response content: {message.response[:100]}...")
+        self.update_ai_status("LLM response received")
+        self.ollama_api.response_history.insert(0, f"LLM: {message.response}")
         self.ollama_conversation = self.ollama_api.get_responses()
         self.history[self.current_session_id]["ai_responses"] = self.ollama_conversation
         self.update_ollama_display()
-        self.log("Transcription processed.")
-    
-    
+        self.log("Transcription processed and display updated")
+        self.log(f"Current ollama_conversation: {self.ollama_conversation[:200]}...")
 
     def start_new_session(self):
         # Create a parent ID
