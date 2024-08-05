@@ -2,7 +2,7 @@
 
 ## Overview
 
-This application provides real-time audio transcription and analysis using Large Language Models (LLMs). It captures audio input, transcribes it, and processes the transcription through an LLM to generate intelligent responses. The system is designed for various use cases, including interview assistance, coding help, and general question-answering.  Customizable prompt templates allow for testing multiple audio driven agent use cases such as co-piloting.
+This application provides real-time audio transcription and analysis using Large Language Models (LLMs). It captures audio input, transcribes it, and processes the transcription through an LLM to generate intelligent responses. The system is designed for various use cases, including interview assistance, coding help, and general question-answering.  Customizable prompt templates allow for testing multiple audio driven agent use cases such as co-piloting with an audio feed, direct multi-modal human voice interaction, etc.  
 
 ## Features
 
@@ -19,8 +19,13 @@ This application provides real-time audio transcription and analysis using Large
 
 - Python 3.7+
 - Ollama (for local LLM integration)
-- Vosk (for offline speech recognition)
+- Vosk (for offline speech recognition).  Audio language models can be downloaded at https://alphacephei.com/vosk/models
 - Google Cloud SDK (for Google Cloud Speech-to-Text, optional)
+
+- Headset/microphone (supports bluetooth)
+- Software audio loopback for mixing microphone and other audio source such as from a browser or video conferencing tool 
+  
+  Users can pipe audio on their machines using Mac MIDI Studio, Existential Audio's BlackHole, Rogue Amoeba's Loopback, etc.  On windows, Jack Audio Connection Kit, VB Audio, etc.  Ubuntu users might use PulseAudio, etc.
 
 [![Watch the demo video](docs/images/screenshot_home.png)](https://youtu.be/X29zS82GMVk?hd=1 "Demo")
 
