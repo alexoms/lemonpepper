@@ -1,5 +1,3 @@
-Here's a draft of the readme.md file for this application:
-
 # LLM-Powered Real-Time Audio Transcription and Analysis
 
 ## Overview
