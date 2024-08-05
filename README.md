@@ -75,7 +75,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-TBD
+MIT License
 
 ## Acknowledgements
 
