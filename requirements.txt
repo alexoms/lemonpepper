@@ -1,0 +1,10 @@
+vosk
+numpy
+sounddevice
+google-cloud-speech
+webrtcvad
+textual
+textual-slider
+ollama
+pyperclip
+rich
