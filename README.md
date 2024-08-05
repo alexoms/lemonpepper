@@ -1,4 +1,4 @@
-# LLM-Powered Real-Time Audio Transcription and Analysis
+# AI Agent for LLM-Powered Real-Time Audio Transcription and Analysis
 
 ## Overview
 
