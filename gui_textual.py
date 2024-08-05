@@ -696,15 +696,21 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
             self.copy_ai_response_to_clipboard()
 
     def copy_ai_response_to_clipboard(self):
+        # Get the latest transcription
+        latest_transcription = self.query_one("#transcription", TextArea).text
+    
         # Assuming ollama_conversation contains the Markdown string
         markdown_content = self.ollama_conversation
+
+        # Combine the latest transcription and AI response
+        combined_content = f"> **_TRANSCRIPTION:_** {self.transcription}\n\n---\n\n{markdown_content}"
 
         # If ollama_conversation is not directly accessible, you might need to get it from the widget
         # markdown_content = self.query_one("#ollama", Static).renderable.markup
 
         # Copy the Markdown content to clipboard
-        copy_to_clipboard(markdown_content)
-        self.notify("AI response (with Markdown) copied to clipboard", timeout=3)
+        copy_to_clipboard(combined_content)
+        self.notify("Latest transcription and LLM response copied to clipboard", timeout=3)
 
     def resubmit_transcription(self):
         transcription = self.query_one("#transcription", TextArea).text
