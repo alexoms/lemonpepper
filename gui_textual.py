@@ -151,7 +151,9 @@ class RealtimeTranscribeToAI(App):
         overflow-y: auto;
         scrollbar-size: 3 2;
         scrollbar-color: rgba(0,0,0,0.5) rgba(255,255,255,0.5);
-        background: orange 20%;
+        background: $primary-background;
+        color: $primary
+         
     }
     #device {
         border: solid yellow;
@@ -374,17 +376,17 @@ class RealtimeTranscribeToAI(App):
                                                                                 888                                            888                                                          888       
                                                                                 888                                       Y8b d88P                                                     Y8b d88P       
                                                                                 888                                        "Y88P"                                                       "Y88P"        
- .d888                               d8888               888 d8b                                                                                                                                      
-d88P"                               d88888               888 Y8P                                                                                                                                      
-888                                d88P888               888                                                                                                                                          
-888888  .d88b.  888d888           d88P 888 888  888  .d88888 888  .d88b.                                                                                                                              
-888    d88""88b 888P"            d88P  888 888  888 d88" 888 888 d88""88b                                                                                                                             
-888    888  888 888             d88P   888 888  888 888  888 888 888  888                                                                                                                             
-888    Y88..88P 888            d8888888888 Y88b 888 Y88b 888 888 Y88..88P                                                                                                                             
-888     "Y88P"  888           d88P     888  "Y88888  "Y88888 888  "Y88P"                                                                                                                              
-                                                                                                                                                                                                      
-                                                                                                                                                                                                      
-                                                                                                                                                                                                      
+ .d888                               d8888               888 d8b                      888         d8b                                         d8888                            888                    
+d88P"                               d88888               888 Y8P                      888         Y8P                                        d88888                            888                    
+888                                d88P888               888                          888                                                   d88P888                            888                    
+888888  .d88b.  888d888           d88P 888 888  888  .d88888 888  .d88b.          .d88888 888d888 888 888  888  .d88b.  88888b.            d88P 888  .d88b.   .d88b.  88888b.  888888 .d8888b         
+888    d88""88b 888P"            d88P  888 888  888 d88" 888 888 d88""88b        d88" 888 888P"   888 888  888 d8P  Y8b 888 "88b          d88P  888 d88P"88b d8P  Y8b 888 "88b 888    88K             
+888    888  888 888             d88P   888 888  888 888  888 888 888  888 888888 888  888 888     888 Y88  88P 88888888 888  888         d88P   888 888  888 88888888 888  888 888    "Y8888b.        
+888    Y88..88P 888            d8888888888 Y88b 888 Y88b 888 888 Y88..88P        Y88b 888 888     888  Y8bd8P  Y8b.     888  888        d8888888888 Y88b 888 Y8b.     888  888 Y88b.       X88        
+888     "Y88P"  888           d88P     888  "Y88888  "Y88888 888  "Y88P"          "Y88888 888     888   Y88P    "Y8888  888  888       d88P     888  "Y88888  "Y8888  888  888  "Y888  88888P'        
+                                                                                                                                                         888                                          
+                                                                                                                                                    Y8b d88P                                          
+                                                                                                                                                     "Y88P"                                           
 888                                                                                                                                                                                                   
 888                                                                                                                                                                                                   
 888                                                                                                                                                                                                   
@@ -395,9 +397,7 @@ d88P"                               d88888               888 Y8P
 88888P"   "Y88888                                                                                                                                                                                     
               888                                                                                                                                                                                     
          Y8b d88P                                                                                                                                                                                     
-          "Y88P"                                                                                                                               
-                                                                                                                                                                                                      
-                                                                                                                                   
+          "Y88P"                                                                                                                                                                                                                                                                                  
                              
                            
   _   _       _     _       _                     ___       _                       _           _   ____                _            _         _     _     ____ 
@@ -442,7 +442,7 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
         self.log_thread.start()
         self.start_new_session()
         self.set_timer(0.1, self.update_device_selector)
-        self.query_one("#transcription", TextArea).border_title = "Complete Transcription"
+        self.query_one("#transcription", TextArea).border_title = "Complete Transcription (editable)"
         self.query_one("#left-pane", VerticalScroll).border_title = "LLM Response"
         self.query_one("#partial", TextArea).border_title = "Partial Transcription"
         self.query_one("#user_input", TextArea).border_title = "Include Custom Message with Transcription"
