@@ -26,7 +26,6 @@ from textual.widgets import Header, Footer, Static, Input, Button, ListView, Lis
 from textual.widget import Widget
 from textual.reactive import reactive
 from textual_slider import Slider
-from transcribe_audio import AudioTranscriber
 from ollama_api import OllamaAPI
 import sounddevice as sd
 import signal
@@ -42,6 +41,11 @@ from rich.console import Console
 from rich.text import Text
 from pyperclip import copy as copy_to_clipboard
 from io import StringIO
+import json
+from rich.text import Text
+from rich.style import Style
+from textual.timer import Timer
+import threading
 
 class UpdateOllamaDisplay(Message):
     def __init__(self, conversation: str, status: str):
@@ -51,17 +55,109 @@ class UpdateOllamaDisplay(Message):
 
 # Create a custom footer with AudioLevelMonitor
 class CustomFooter(Footer):
+
     def __init__(self):
         super().__init__()
         self.status_message = Static("Idle", id="ai-status")
+        self.spinner = Static("", id="spinner")
+        self.shortcuts = Static("", id="shortcuts")
+        self.spinner_thread = None
+        self.is_spinning = False
+        self.highlights = []  # Initialize highlights as an empty list
+        self.status_timer: threading.Timer | None = None
+        self.timer_lock = threading.Lock()
+
+        # Load spinners from JSON
+        with open("spinners.json", "r") as f:
+            self.spinners = json.load(f)
+        self.current_spinner = self.spinners["dots"]
 
     def compose(self):
+        yield self.spinner
         yield self.status_message
-        yield Static("", id="footer-spacer")
+        #yield self.shortcuts
+        yield Static("", id="footer-spacer-left")
+        
+        yield Static("", id="footer-spacer-right")
         yield AudioLevelMonitor(id="audio-monitor")
+    
+    def on_mount(self):
+        self.update_shortcuts()
+    
+    def update_shortcuts(self):
+        shortcuts = self.app.get_shortcuts()
+        shortcut_text = " ".join(f"[{key}]{action}" for key, action in shortcuts.items())
+        self.shortcuts.update(shortcut_text)
 
+    def update_highlights(self) -> None:
+        shortcuts = self.app.get_shortcuts()
+        highlight_keys = set(self.highlights) & set(shortcuts.keys())
+        non_highlight_keys = set(shortcuts.keys()) - set(self.highlights)
+        
+        text = Text()
+        for key in highlight_keys:
+            text.append(f" {key} ", "reverse")
+            text.append(f" {shortcuts[key]} ", "bold")
+        
+        for key in non_highlight_keys:
+            text.append(f" {key} ", "dim")
+            text.append(f" {shortcuts[key]} ", "")
+        
+        self.shortcuts.update(text)
+
+    def set_highlights(self, keys: list[str]) -> None:
+        """Set the keys to be highlighted."""
+        self.highlights = keys
+        self.update_highlights()
+        
     def update_status(self, message: str):
+        #colored_text = Text()
+        #colors = ["red", "green", "yellow", "blue", "magenta", "cyan"]
+        #for i, char in enumerate(message):
+        #    colored_text.append(char, Style(color=colors[i % len(colors)]))
+        #self.status_message.update(colored_text)
         self.status_message.update(message)
+        
+        if message == "Waiting for LLM response...":
+            self.start_spinner()
+        elif message == "AI response received":
+            self.stop_spinner()
+            self.set_reset_timer()
+            self.app.log(f"Set status to '{message}' and started timer")  # Debug print
+        else:
+            self.stop_spinner()
+        self.app.log(f"Status updated to: {message}")  # Debug print
+    
+    def set_reset_timer(self):
+        with self.timer_lock:
+            if self.status_timer:
+                self.status_timer.cancel()
+            self.status_timer = threading.Timer(2.0, self.reset_status)
+            self.status_timer.start()
+
+    def reset_status(self):
+        self.app.log("Actually resetting status to Idle")  # Debug print
+        self.update_status("Idle")
+
+    def start_spinner(self):
+        if not self.is_spinning:
+            self.is_spinning = True
+            self.spinner_thread = Thread(target=self._spin, daemon=True)
+            self.spinner_thread.start()
+
+    def stop_spinner(self):
+        self.is_spinning = False
+        if self.spinner_thread:
+            self.spinner_thread.join()
+        self.spinner.update("")
+
+    def _spin(self):
+        index = 0
+        while self.is_spinning:
+            frame = self.current_spinner["frames"][index]
+            self.spinner.update(frame)  # Remove the Text wrapper
+            time.sleep(self.current_spinner["interval"] / 1000)
+            index = (index + 1) % len(self.current_spinner["frames"])
 
 class AudioLevelMonitor(Static):
     levels = reactive(([float('-inf')] * 2, [float('-inf')] * 2))
@@ -253,11 +349,16 @@ class RealtimeTranscribeToAI(App):
         content-align: left middle;
         background: $boost;
     }
-    #footer-spacer {
+    #footer-spacer-left, #footer-spacer-right {
         width: 1fr;
     }
-
-
+    #spinner {
+        width: auto;
+        min-width: 3;
+        content-align: center middle;
+        background: $boost;
+        color: #FF69B4;  /* Hot pink color */
+    }
     #audio-monitor {
         width: auto;
         min-width: 90;  # Adjust this value as needed
@@ -266,6 +367,14 @@ class RealtimeTranscribeToAI(App):
         background: $boost;
         color: $text;
         content-align: right middle;
+    }
+    #shortcuts {
+        width: auto;
+        background: $boost;
+        color: $text;
+        content-align: left middle;
+        padding-left: 1;
+        padding-right: 1;
     }
     """
     # add new window
@@ -294,7 +403,9 @@ class RealtimeTranscribeToAI(App):
 
     def compose(self) -> ComposeResult:
         yield Header()
-        yield CustomFooter()
+        footer = CustomFooter()
+        yield footer
+        footer.set_highlights(["ctrl+q", "ctrl+c"])  # Set the keys you want to highlight
         with TabbedContent(initial="home"):
             with TabPane("Home", id="home"):
                 #with Container(id="app-grid"):
@@ -452,6 +563,9 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
         # Set up signal handling
         signal.signal(signal.SIGINT, self.handle_interrupt)
         #self.update_content_timer = self.set_interval(1/30, self.update_content)
+    
+    def get_shortcuts(self) -> dict[str, str]:
+        return {binding.key: binding.description for binding in self.BINDINGS}
     
     def initialize_transcriber(self):
         if self.transcription_method == "vosk":
