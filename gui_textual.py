@@ -21,6 +21,12 @@ handler.setFormatter(formatter)
 logging.basicConfig(level=logging.DEBUG, handlers=[handler])
 
 
+import traceback
+
+def excepthook(exc_type, exc_value, exc_traceback):
+    logging.error("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
+
+sys.excepthook = excepthook
 
 import uuid
 from datetime import datetime
