@@ -14,6 +14,7 @@ logging.basicConfig(level=logging.WARNING)  # Change to WARNING or ERROR in prod
 
 class AudioTranscriber:
     def __init__(self, model_path="../vosk-model-en-us-0.42-gigaspeech/", sample_rate=16000, channels=1, chunk=480):
+        logging.info(f"Initializing AudioTranscriber with model path: {model_path}")
         self.model = vosk.Model(model_path)
         self.recognizer = vosk.KaldiRecognizer(self.model, sample_rate)
         self.sample_rate = sample_rate
@@ -153,8 +154,9 @@ class AudioTranscriber:
 
     def list_audio_devices(self):
         devices = sd.query_devices()
-        return [f"{i}: {device['name']} (in: {device['max_input_channels']}, out: {device['max_output_channels']})"
-                for i, device in enumerate(devices)]
+        for i, device in enumerate(devices):
+            logging.info(f"{i}: {device['name']} (in: {device['max_input_channels']}, out: {device['max_output_channels']})")
+        return devices
 
     def get_device_choice(self):
         self.list_audio_devices()

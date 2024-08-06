@@ -1,4 +1,5 @@
 import io
+import sys
 import logging
 from collections import deque
 from threading import Thread, Lock
@@ -18,6 +19,9 @@ handler = RotatingLogHandler()
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
 logging.basicConfig(level=logging.DEBUG, handlers=[handler])
+
+
+
 import uuid
 from datetime import datetime
 import numpy as np
@@ -37,6 +41,7 @@ from textual.message import Message
 from rich.markdown import Markdown as RichMarkdown
 from transcribe_audio import AudioTranscriber
 from transcribe_audio_google_cloud import AudioTranscriberGoogleCloud
+from transcribe_audio_whisper import WhisperStreamTranscriber
 from rich.console import Console
 from rich.text import Text
 from pyperclip import copy as copy_to_clipboard
@@ -46,6 +51,16 @@ from rich.text import Text
 from rich.style import Style
 from textual.timer import Timer
 import threading
+
+
+class LogRedirector(io.StringIO):
+    def write(self, string):
+        string = string.strip()
+        if string:
+            logging.info(string)
+
+    def flush(self):
+        pass
 
 class UpdateOllamaDisplay(Message):
     def __init__(self, conversation: str, status: str):
@@ -206,9 +221,11 @@ class AudioLevelMonitor(Static):
         return result
     
 class RealtimeTranscribeToAI(App):
+    WHISPER_MODEL_PATH = "./whisper_models/ggml-base.en.bin"
     TRANSCRIPTION_OPTIONS = [
-        ("Vosk", "vosk"),
-        ("Google Cloud", "google_cloud")
+        ("Vosk", "vosk", None),
+        ("Google Cloud", "google_cloud", None),
+        ("Whisper", "whisper", WHISPER_MODEL_PATH)
     ]
     CSS_PATH = "gui_textual.tcss"
     BINDINGS = [Binding("ctrl+q", "quit", "Quit"),
@@ -404,6 +421,8 @@ class RealtimeTranscribeToAI(App):
         super().__init__()
         self.devices = self.list_audio_devices()
         self.selected_device = "No device selected"
+        self.transcriber = None
+        self.transcription_method = self.TRANSCRIPTION_OPTIONS[0][1]  # Default to the first option
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -457,8 +476,8 @@ class RealtimeTranscribeToAI(App):
                         yield Select(id="device_selector", prompt="Select an audio input device", options=self.PROMPT_DEVICE_OPTIONS, allow_blank=True)
                         yield Static("Audio transcriber to use: ")
                         with RadioSet(id="transcription_selector"):
-                                for i, (label, value) in enumerate(self.TRANSCRIPTION_OPTIONS):
-                                    yield RadioButton(label, id=f"transcription_{value}", value=(i == 0))
+                            for label, value, _ in self.TRANSCRIPTION_OPTIONS:
+                                yield RadioButton(label, id=f"transcription_{value}")
                         # yield Select(
                         #     options=self.TRANSCRIPTION_OPTIONS,
                         #     id="transcription_selector",
@@ -544,7 +563,7 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
         #self.transcriber = None
         #self.transcription_method = "vosk"  # Default to Vosk
         self.transcription_method = self.TRANSCRIPTION_OPTIONS[0][1]
-        self.initialize_transcriber()
+        #self.initialize_transcriber()
 
         self.audio_monitor = self.query_one(AudioLevelMonitor)
         self.devices = self.list_audio_devices()
@@ -589,11 +608,31 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
         return {binding.key: binding.description for binding in self.BINDINGS}
     
     def initialize_transcriber(self):
-        if self.transcription_method == "vosk":
-            self.transcriber = AudioTranscriber()
-        elif self.transcription_method == "google_cloud":
-            self.transcriber = AudioTranscriberGoogleCloud()
-        self.log(f"Initialized transcriber: {self.transcription_method}")
+        transcription_info = next((option for option in self.TRANSCRIPTION_OPTIONS if option[1] == self.transcription_method), None)
+        if transcription_info:
+            _, method, model_path = transcription_info
+            if method == "vosk":
+                # Redirect stdout to our custom logger
+                old_stdout = sys.stdout
+                sys.stdout = LogRedirector()
+                try:
+                    self.transcriber = AudioTranscriber()
+                finally:
+                    # Restore stdout
+                    sys.stdout = old_stdout
+            elif method == "google_cloud":
+                self.transcriber = AudioTranscriberGoogleCloud()
+            elif method == "whisper":
+                if model_path:
+                    self.transcriber = WhisperStreamTranscriber(model_path=model_path)
+                else:
+                    self.log("Error: Whisper model path not found")
+                    return None
+            self.log(f"Initialized transcriber: {method}")
+            return self.transcriber
+        else:
+            self.log(f"Error: Unknown transcription method {self.transcription_method}")
+            return None
 
     def on_radio_set_changed(self, event: RadioSet.Changed) -> None:
         if event.radio_set.id == "prompt_selector":
@@ -602,9 +641,14 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
             self.log(f"Changed prompt to: {event.pressed.label}")
         elif event.radio_set.id == "transcription_selector":
             selected_value = event.pressed.id.split("_", 1)[1]
-            self.transcription_method = selected_value
-            self.initialize_transcriber()
-            self.log(f"Changed transcription method to: {event.pressed.label}")
+            if selected_value != self.transcription_method:
+                self.transcription_method = selected_value
+                if self.transcriber:
+                    self.transcriber.stop_transcribing()
+                self.transcriber = None  # Reset the transcriber
+                self.log(f"Changed transcription method to: {event.pressed.label}")
+            else:
+                self.log(f"Transcription method unchanged: {event.pressed.label}")
 
     def find_blackhole_2ch(self):
         devices = sd.query_devices()
@@ -739,10 +783,13 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
         self.call_from_thread(update)
 
     def start_transcribing(self, device_index):
+        if not self.transcriber:
+            self.initialize_transcriber()
+        
         if self.transcriber:
             self.transcriber.start_transcribing(device_index=device_index, transcription_callback=self.transcription_callback)
         else:
-            logging.error("No transcriber selected")
+            logging.error("Failed to initialize transcriber")
 
     def update_content(self):
         while not self.stop_event:
