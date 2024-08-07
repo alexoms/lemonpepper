@@ -19,6 +19,7 @@ This application provides real-time audio transcription and analysis using Large
 
 - Python 3.7+
 - Ollama (for local LLM integration)
+- Whisper (for offline speech recognition).  Audio language models can be downloaded at https://huggingface.co/ggerganov/whisper.cpp/tree/main
 - Vosk (for offline speech recognition).  Audio language models can be downloaded at https://alphacephei.com/vosk/models
 - Google Cloud SDK (for Google Cloud Speech-to-Text, optional)
 
