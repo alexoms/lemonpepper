@@ -1,4 +1,4 @@
-# Co-pilot AI Agent using Offline Real-Time Audio Transcription and Offline LLM-Powered Analysis
+# Co-Pilot AI Agent using Offline Real-Time Audio Transcription and Offline LLM-Powered Analysis
 
 ## Overview
 
