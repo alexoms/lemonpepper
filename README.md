@@ -32,6 +32,10 @@ This application provides real-time audio transcription and analysis using Large
 
 ## Installation
 
+[OPTIONAL] It is recommended to utilize a Python version management system, such as Miniconda for this step:
+To create an environment, use: conda create -n py310-audio-ai python=3.10 -y
+To activate the environment, use: conda activate py310-audio-ai
+
 1. Clone the repository:
    ```
    git clone https://github.com/alexoms/audioAI.git
