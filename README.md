@@ -1,4 +1,4 @@
-# AI Agent for LLM-Powered Real-Time Audio Transcription and Analysis
+# Co-pilot AI Agent using Offline Real-Time Audio Transcription and Offline LLM-Powered Analysis
 
 ## Overview
 
@@ -8,7 +8,7 @@ This application provides real-time audio transcription and analysis using Large
 
 - Real-time audio transcription using either Vosk or Google Cloud Speech-to-Text
 - Integration with Ollama API for LLM-powered responses
-- Customizable prompts for different types of interactions (e.g., coding, non-coding interviews)
+- Customizable prompts for different types of interactions (e.g., interviews, summaries, helpful assistance, conversation analysis, sentiment analysis, puzzle solving, design architecting, code ideation, business strategy recommender)
 - Dynamic audio visualization with level monitoring
 - Session management for keeping track of multiple conversations
 - User-friendly GUI built with Textual
@@ -96,4 +96,5 @@ MIT License
 - [pywhispercpp](https://github.com/abdeladim-s/pywhispercpp) for python bindings to whisper.cpp
 - [Whisper.cpp](https://github.com/ggerganov/whisper.cpp) for c++ port of OpenAI's Whisper model
 - OpenAI for their Whisper model
+- Meta's Llama 3.1 8B robust LLM model 
 ---
