@@ -784,6 +784,7 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
             
             # Update the TextArea
             self.query_one("#transcription", TextArea).text = self.transcription
+            self.query_one("#partial", TextArea).text = self.partial_transcription
             #self.update_ollama_display()
             #self.query_one(Markdown).update(self.history[self.current_session_id]["ai_responses"])
         self.call_from_thread(update)

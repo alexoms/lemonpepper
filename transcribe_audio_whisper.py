@@ -1,94 +1,64 @@
 import logging
-import os
-import ctypes
-import sys
 import numpy as np
 import queue
 import threading
 import sounddevice as sd
+from pywhispercpp.model import Model
+import pywhispercpp.constants as constants
 
 class WhisperStreamTranscriber:
-    def __init__(self, model_path, sample_rate=16000, channels=1, n_threads=4, step_ms=1000, length_ms=10000):
+    def __init__(self, model_path, sample_rate=16000, channels=1, n_threads=8, block_size=4096, buffer_size=3):
         self.model_path = model_path
         self.sample_rate = sample_rate
         self.channels = channels
         self.n_threads = n_threads
-        self.step_ms = step_ms
-        self.length_ms = length_ms
+        self.block_size = block_size
+        self.buffer_size = buffer_size
         
-        self.audio_queue = queue.Queue()
+        self.audio_queue = queue.Queue(maxsize=buffer_size)
         self.stop_event = threading.Event()
         self.pause_event = threading.Event()
         
         self.whisper_thread = None
         self.transcription_callback = None
         
+        self.audio_levels = [float('-inf')] * channels
+        self.peak_levels = [float('-inf')] * channels
+        self.lock = threading.Lock()
+        self.last_words = []
         self.initialize_whisper()
 
     def initialize_whisper(self):
         try:
             logging.info(f"Initializing Whisper with model path: {self.model_path}")
-            
-            if os.name == 'posix':
-                lib_ext = '.so' if not sys.platform.startswith('darwin') else '.dylib'
-            elif os.name == 'nt':
-                lib_ext = '.dll'
-            else:
-                raise OSError("Unsupported operating system")
-
-            lib_path = f"./libwhisper{lib_ext}"
-            if not os.path.exists(lib_path):
-                raise FileNotFoundError(f"Whisper library not found: {lib_path}")
-            
-            self.whisper = ctypes.CDLL(lib_path)
-
-            self.ctx = self.whisper.whisper_init_from_file(self.model_path.encode())
-            if not self.ctx:
-                raise RuntimeError("Failed to initialize Whisper model")
-
-             # Check if WHISPER_SAMPLING_GREEDY is available
-            try:
-                sampling_strategy = self.whisper.WHISPER_SAMPLING_GREEDY
-            except AttributeError:
-                logging.warning("WHISPER_SAMPLING_GREEDY not found, using default sampling strategy")
-                sampling_strategy = 0  # Use 0 as a default value
-
-            self.stream_params = self.whisper.whisper_full_default_params(sampling_strategy)
-            self.stream_params.print_realtime = ctypes.c_bool(True)
-            self.stream_params.print_progress = ctypes.c_bool(False)
-            self.stream_params.no_context = ctypes.c_bool(True)
-            self.stream_params.single_segment = ctypes.c_bool(True)
-            self.stream_params.max_len = ctypes.c_int(0)
-            self.stream_params.language = ctypes.c_char_p(b"en")
-
-
-            self.whisper.whisper_set_threads(self.ctx, ctypes.c_int(self.n_threads))
-
+            self.model = Model(self.model_path,
+                               n_threads=self.n_threads,
+                               print_realtime=False,
+                               print_progress=False,
+                               print_timestamps=False,
+                               single_segment=False)
             logging.info("Whisper initialized successfully")
         except Exception as e:
             logging.error(f"Error initializing Whisper: {e}")
             raise
 
     def whisper_worker(self):
+        audio_data = np.array([])
+        overlap = int(0.5 * constants.WHISPER_SAMPLE_RATE)  # 0.5 second overlap
         try:
             while not self.stop_event.is_set():
                 try:
-                    audio_data = self.audio_queue.get(timeout=0.1)
-                    audio_int16 = (audio_data * 32767).astype(np.int16)
+                    new_audio = self.audio_queue.get(timeout=0.1)
+                    audio_data = np.append(audio_data, new_audio)
 
-                    result = self.whisper.whisper_full(
-                        self.ctx,
-                        self.stream_params,
-                        audio_int16.ctypes.data_as(ctypes.POINTER(ctypes.c_short)),
-                        len(audio_int16)
-                    )
-
-                    if result == 0:
-                        transcription = ctypes.create_string_buffer(1024)
-                        self.whisper.whisper_full_get_segment_text(self.ctx, 0, transcription, 1024)
-                        text = transcription.value.decode('utf-8')
-                        if self.transcription_callback and text.strip():
-                            self.transcription_callback(text, is_partial=False)
+                    if len(audio_data) >= 8 * constants.WHISPER_SAMPLE_RATE:
+                        segments = self.model.transcribe(audio_data)
+                        transcription = " ".join(segment.text for segment in segments)
+                        if self.transcription_callback and transcription.strip():
+                            self.transcription_callback(transcription, is_partial=False)
+                        
+                        # Keep the overlap for the next processing
+                        audio_data = audio_data[-overlap:]
 
                 except queue.Empty:
                     continue
@@ -98,9 +68,50 @@ class WhisperStreamTranscriber:
         except Exception as e:
             logging.error(f"Error in Whisper thread: {e}")
         finally:
-            if self.ctx:
-                self.whisper.whisper_free(self.ctx)
             logging.info("Whisper thread terminated")
+
+    def process_segments(self, segments):
+        processed_texts = []
+        for segment in segments:
+            words = segment.text.split()
+            if words and not all(word.upper() == '[SILENCE]' for word in words):
+                # Remove duplicated words from the beginning of the segment
+                while words and self.last_words and words[0].lower() == self.last_words[-1].lower():
+                    words.pop(0)
+                
+                # Remove [SILENCE] markers
+                words = [word for word in words if word.upper() != '[SILENCE]']
+                
+                if words:
+                    processed_texts.append(" ".join(words))
+                    # Store the last few words for next iteration
+                    self.last_words = words[-2:]  # Store last 3 words
+
+        return " ".join(processed_texts)
+    
+    def audio_callback(self, indata, frames, time, status):
+        if status:
+            logging.warning(f"Audio callback status: {status}")
+        if not self.pause_event.is_set():
+            # Calculate RMS for each channel
+            rms_levels = [np.sqrt(np.mean(indata[:, i]**2)) for i in range(self.channels)]
+            # Convert to dB, avoiding log(0)
+            db_levels = [20 * np.log10(max(level, 1e-7)) for level in rms_levels]
+            
+            with self.lock:
+                self.audio_levels = db_levels
+                self.peak_levels = [max(current, peak) for current, peak in zip(db_levels, self.peak_levels)]
+            
+            audio = np.frombuffer(indata, dtype=np.float32)
+            self.audio_queue.put(audio)
+
+    def get_audio_levels(self):
+        with self.lock:
+            return self.audio_levels, self.peak_levels
+
+    def reset_peak_levels(self):
+        with self.lock:
+            self.peak_levels = list(self.audio_levels)
 
     def start_transcribing(self, device_index=None, transcription_callback=None):
         self.transcription_callback = transcription_callback
@@ -115,7 +126,7 @@ class WhisperStreamTranscriber:
                 callback=self.audio_callback, 
                 channels=self.channels,
                 samplerate=self.sample_rate, 
-                blocksize=int(self.sample_rate * self.step_ms / 1000),
+                blocksize=self.block_size,
                 device=device_index
             )
             self.input_stream.start()
@@ -127,7 +138,8 @@ class WhisperStreamTranscriber:
         if status:
             logging.warning(f"Audio callback status: {status}")
         if not self.pause_event.is_set():
-            self.audio_queue.put(indata.copy())
+            audio = np.frombuffer(indata, dtype=np.float32)
+            self.audio_queue.put(audio)
 
     def stop_transcribing(self):
         self.stop_event.set()
