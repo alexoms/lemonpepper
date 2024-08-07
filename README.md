@@ -70,6 +70,7 @@ python gui_textual.py
 
 - `gui_textual.py`: Main application GUI and control logic
 - `ollama_api.py`: Integration with Ollama for LLM processing
+- `transcribe_audio_whisper.py`: Whisper-based audio transcription
 - `transcribe_audio.py`: Vosk-based audio transcription
 - `transcribe_audio_google_cloud.py`: Google Cloud Speech-to-Text integration
 
