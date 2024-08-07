@@ -88,5 +88,7 @@ MIT License
 - Google Cloud Speech-to-Text for online transcription
 - Ollama for local LLM integration
 - Textual for the TUI framework
-
+- [pywhispercpp](https://github.com/abdeladim-s/pywhispercpp) for python bindings to whisper.cpp
+- [Whisper.cpp](https://github.com/ggerganov/whisper.cpp) for c++ port of OpenAI's Whisper model
+- OpenAI for their Whisper model
 ---
