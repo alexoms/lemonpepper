@@ -85,7 +85,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-MIT License
+Apache License Version 2.0
 
 ## Acknowledgements
 
