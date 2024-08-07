@@ -7,7 +7,7 @@ from pywhispercpp.model import Model
 import pywhispercpp.constants as constants
 
 class WhisperStreamTranscriber:
-    def __init__(self, model_path, sample_rate=16000, channels=1, n_threads=8, block_size=4096, buffer_size=3):
+    def __init__(self, model_path, sample_rate=16000, channels=1, n_threads=8, block_size=4096, buffer_size=5):
         self.model_path = model_path
         self.sample_rate = sample_rate
         self.channels = channels
@@ -25,6 +25,8 @@ class WhisperStreamTranscriber:
         self.audio_levels = [float('-inf')] * channels
         self.peak_levels = [float('-inf')] * channels
         self.lock = threading.Lock()
+        self.silence_threshold = 0.005  # Adjust this value to fine-tune silence detection
+        self.silence_duration = 1.0  # Minimum duration of silence (in seconds) to consider as a pause
         self.last_words = []
         self.initialize_whisper()
 
@@ -45,15 +47,27 @@ class WhisperStreamTranscriber:
     def whisper_worker(self):
         audio_data = np.array([])
         overlap = int(0.5 * constants.WHISPER_SAMPLE_RATE)  # 0.5 second overlap
+        silence_samples = 0
         try:
             while not self.stop_event.is_set():
                 try:
                     new_audio = self.audio_queue.get(timeout=0.1)
                     audio_data = np.append(audio_data, new_audio)
 
-                    if len(audio_data) >= 8 * constants.WHISPER_SAMPLE_RATE:
+                    # Check for silence
+                    if self.is_silence(new_audio):
+                        silence_samples += len(new_audio)
+                    else:
+                        silence_samples = 0
+
+                    if len(audio_data) >= 7 * constants.WHISPER_SAMPLE_RATE:
+                        if silence_samples >= int(self.silence_duration * constants.WHISPER_SAMPLE_RATE):
+                            # If we've detected enough silence, don't transcribe
+                            audio_data = audio_data[-overlap:]
+                            continue
+
                         segments = self.model.transcribe(audio_data)
-                        transcription = " ".join(segment.text for segment in segments)
+                        transcription = self.process_segments(segments)
                         if self.transcription_callback and transcription.strip():
                             self.transcription_callback(transcription, is_partial=False)
                         
@@ -70,6 +84,9 @@ class WhisperStreamTranscriber:
         finally:
             logging.info("Whisper thread terminated")
 
+    def is_silence(self, audio):
+        return np.sqrt(np.mean(audio**2)) < self.silence_threshold
+    
     def process_segments(self, segments):
         processed_texts = []
         for segment in segments:

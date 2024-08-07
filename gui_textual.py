@@ -229,9 +229,9 @@ class AudioLevelMonitor(Static):
 class RealtimeTranscribeToAI(App):
     WHISPER_MODEL_PATH = "./whisper_models/ggml-base.en.bin"
     TRANSCRIPTION_OPTIONS = [
-        ("Vosk", "vosk", None),
-        ("Google Cloud", "google_cloud", None),
-        ("Whisper", "whisper", WHISPER_MODEL_PATH)
+        ("OpenAI Whisper", "whisper", WHISPER_MODEL_PATH),
+        ("Alpha Cephei Vosk", "vosk", None),
+        ("Google Cloud", "google_cloud", None)
     ]
     CSS_PATH = "gui_textual.tcss"
     BINDINGS = [Binding("ctrl+q", "quit", "Quit"),
