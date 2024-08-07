@@ -32,9 +32,9 @@ This application provides real-time audio transcription and analysis using Large
 
 ## Installation
 
-[OPTIONAL] It is recommended to utilize a Python version management system, such as Miniconda for this step:
-- To create an environment, use: conda create -n py310-audio-ai python=3.10 -y
-- To activate the environment, use: conda activate py310-audio-ai
+> **_OPTIONAL:_** It is recommended to utilize a Python version management system, such as Miniconda for this step:  
+> - To create an environment, use: **_conda create -n py310-audio-ai python=3.10 -y_**
+> - To activate the environment, use: **_conda activate py310-audio-ai_**
 
 1. Clone the repository:
    ```
