@@ -1,4 +1,5 @@
 import io
+import os
 import sys
 import logging
 from collections import deque
@@ -36,7 +37,6 @@ from textual.widgets import Header, Footer, Static, Input, Button, ListView, Lis
 from textual.widget import Widget
 from textual.reactive import reactive
 from textual_slider import Slider
-from ollama_api import OllamaAPI
 import sounddevice as sd
 import signal
 import time
@@ -45,9 +45,10 @@ from textual.binding import Binding
 import re
 from textual.message import Message
 from rich.markdown import Markdown as RichMarkdown
-from transcribe_audio import AudioTranscriber
-from transcribe_audio_google_cloud import AudioTranscriberGoogleCloud
-from transcribe_audio_whisper import WhisperStreamTranscriber
+from .ollama_api import OllamaAPI
+from .transcribe_audio import AudioTranscriber
+from .transcribe_audio_google_cloud import AudioTranscriberGoogleCloud
+from .transcribe_audio_whisper import WhisperStreamTranscriber
 from rich.console import Console
 from rich.text import Text
 from pyperclip import copy as copy_to_clipboard
@@ -89,7 +90,9 @@ class CustomFooter(Footer):
         self.timer_lock = threading.Lock()
 
         # Load spinners from JSON
-        with open("spinners.json", "r") as f:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        spinners_path = os.path.join(script_dir, "spinners.json")
+        with open(spinners_path, "r") as f:
             self.spinners = json.load(f)
         self.current_spinner = self.spinners["dots"]
 
@@ -227,7 +230,8 @@ class AudioLevelMonitor(Static):
         return result
     
 class RealtimeTranscribeToAI(App):
-    WHISPER_MODEL_PATH = "./whisper_models/ggml-base.en.bin"
+    #WHISPER_MODEL_PATH = "./whisper_models/ggml-base.en.bin"
+    WHISPER_MODEL_PATH = "base.en"
     TRANSCRIPTION_OPTIONS = [
         ("OpenAI Whisper", "whisper", WHISPER_MODEL_PATH),
         ("Alpha Cephei Vosk", "vosk", None),
@@ -1032,10 +1036,13 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
     def action_quit(self):
         self.exit()
 
-if __name__ == "__main__":
+def main():
     app = RealtimeTranscribeToAI()
     try:
         app.run()
     except KeyboardInterrupt:
         print("\nReceived interrupt signal. Shutting down...")
         app.exit()
+
+if __name__ == "__main__":
+    main()
