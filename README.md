@@ -1,4 +1,4 @@
-# AI Agent for LLM-Powered Real-Time Audio Transcription and Analysis
+# Co-Pilot AI Agent using Offline Real-Time Audio Transcription and Offline LLM-Powered Analysis
 
 ## Overview
 
@@ -8,7 +8,7 @@ This application provides real-time audio transcription and analysis using Large
 
 - Real-time audio transcription using either Vosk or Google Cloud Speech-to-Text
 - Integration with Ollama API for LLM-powered responses
-- Customizable prompts for different types of interactions (e.g., coding, non-coding interviews)
+- Customizable prompts for different types of interactions (e.g., interviews, summaries, helpful assistance, conversation analysis, sentiment analysis, puzzle solving, design architecting, code ideation, business strategy recommender)
 - Dynamic audio visualization with level monitoring
 - Session management for keeping track of multiple conversations
 - User-friendly GUI built with Textual
@@ -19,6 +19,7 @@ This application provides real-time audio transcription and analysis using Large
 
 - Python 3.7+
 - Ollama (for local LLM integration)
+- Whisper (for offline speech recognition).  Audio language models can be downloaded at https://huggingface.co/ggerganov/whisper.cpp/tree/main
 - Vosk (for offline speech recognition).  Audio language models can be downloaded at https://alphacephei.com/vosk/models
 - Google Cloud SDK (for Google Cloud Speech-to-Text, optional)
 
@@ -30,6 +31,10 @@ This application provides real-time audio transcription and analysis using Large
 [![Watch the demo video](docs/images/screenshot_home.png)](https://youtu.be/X29zS82GMVk?hd=1 "Demo")
 
 ## Installation
+
+> **_OPTIONAL:_** It is recommended to utilize a Python version management system, such as Miniconda for this step:  
+> - To create an environment, use: **_conda create -n py310-audio-ai python=3.10 -y_**
+> - To activate the environment, use: **_conda activate py310-audio-ai_**
 
 1. Clone the repository:
    ```
@@ -65,6 +70,7 @@ python gui_textual.py
 
 - `gui_textual.py`: Main application GUI and control logic
 - `ollama_api.py`: Integration with Ollama for LLM processing
+- `transcribe_audio_whisper.py`: Whisper-based audio transcription
 - `transcribe_audio.py`: Vosk-based audio transcription
 - `transcribe_audio_google_cloud.py`: Google Cloud Speech-to-Text integration
 
@@ -80,7 +86,18 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-MIT License
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use the files in this project except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
 
 ## Acknowledgements
 
@@ -88,5 +105,8 @@ MIT License
 - Google Cloud Speech-to-Text for online transcription
 - Ollama for local LLM integration
 - Textual for the TUI framework
-
+- [pywhispercpp](https://github.com/abdeladim-s/pywhispercpp) for python bindings to whisper.cpp
+- [Whisper.cpp](https://github.com/ggerganov/whisper.cpp) for c++ port of OpenAI's Whisper model
+- OpenAI for their Whisper model
+- Meta's Llama 3.1 8B robust LLM model 
 ---
