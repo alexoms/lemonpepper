@@ -38,12 +38,16 @@ This application provides real-time audio transcription and analysis using Large
 
 1. Clone the repository:
    ```
-   git clone https://github.com/alexoms/bucho.git
-   cd bucho
+   git clone https://github.com/alexoms/lemonpepper.git
+   cd lemonpepper
    ```
 
 2. Install required dependencies:
    ```
+   pip install lemonpepper
+
+   or 
+
    pip install .
    ```
 
@@ -56,7 +60,7 @@ This application provides real-time audio transcription and analysis using Large
 Run the application:
 
 ```
-bucho
+lemonpepper
 ```
 
 1. Choose the transcription method (Whisper, Vosk or Google Cloud).

@@ -3,7 +3,7 @@ import appdirs
 
 def get_model_directory():
     # Use appdirs to get the appropriate user data directory
-    user_data_dir = appdirs.user_data_dir("bucho", "UnidatumIntegratedProductsLLC")
+    user_data_dir = appdirs.user_data_dir("lemonpepper", "UnidatumIntegratedProductsLLC")
     model_dir = os.path.join(user_data_dir, "whisper_models")
     
     # Create the directory if it doesn't exist

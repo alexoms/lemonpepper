@@ -230,7 +230,7 @@ class AudioLevelMonitor(Static):
         result.append(f" L:{self.levels[0][0]:.0f}dB P:{self.levels[1][0]:.0f}dB")
         return result
     
-class RealtimeTranscribeToAI(App):
+class LemonPepper(App):
     #WHISPER_MODEL_PATH = "./whisper_models/ggml-base.en.bin"
     WHISPER_MODEL_PATH = "base.en"
     TRANSCRIPTION_OPTIONS = [
@@ -1116,7 +1116,7 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
         self.exit()
 
 def main():
-    app = RealtimeTranscribeToAI()
+    app = LemonPepper()
     try:
         app.run()
     except KeyboardInterrupt:
