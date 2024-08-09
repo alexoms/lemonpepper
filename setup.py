@@ -16,7 +16,7 @@ setup(
     long_description_content_type="text/markdown",
     url="https://github.com/alexoms/bucho",
     packages=find_packages(include=['bucho', 'bucho.*']),
-    install_requires=requirements,
+    install_requires=requirements + ['appdirs'],
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: Apache 2.0 License",

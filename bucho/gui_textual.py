@@ -58,7 +58,8 @@ from rich.text import Text
 from rich.style import Style
 from textual.timer import Timer
 import threading
-
+from .utils import get_model_directory
+from .model_manager import ModelDownloadButton
 
 class LogRedirector(io.StringIO):
     def write(self, string):
@@ -429,6 +430,13 @@ class RealtimeTranscribeToAI(App):
 
     def __init__(self):
         super().__init__()
+        self.model_dir = get_model_directory()
+        self.TRANSCRIPTION_OPTIONS = [
+            ("OpenAI Whisper base.en", "whisper_base_en", os.path.join(self.model_dir, "ggml-base.en.bin")),
+            ("OpenAI Whisper small.en", "whisper_small_en", os.path.join(self.model_dir, "ggml-small.en.bin")),
+            ("Alpha Cephei Vosk", "vosk", None),
+            ("Google Cloud", "google_cloud", None)
+        ]
         self.devices = self.list_audio_devices()
         self.selected_device = "No device selected"
         self.transcriber = None
@@ -481,13 +489,11 @@ class RealtimeTranscribeToAI(App):
                     
   
             with TabPane("Settings", id="settings"):
-                    with VerticalScroll(id="audio-device-settings"):
-                        yield Static("Audio input device to transcribe: ")
-                        yield Select(id="device_selector", prompt="Select an audio input device", options=self.PROMPT_DEVICE_OPTIONS, allow_blank=True)
-                        yield Static("Audio transcriber to use: ")
-                        with RadioSet(id="transcription_selector"):
-                            for label, value, _ in self.TRANSCRIPTION_OPTIONS:
-                                yield RadioButton(label, id=f"transcription_{value}")
+                with VerticalScroll(id="audio-device-settings"):
+                    yield Static("Audio input device to transcribe: ")
+                    yield Select(id="device_selector", prompt="Select an audio input device", options=self.PROMPT_DEVICE_OPTIONS, allow_blank=True)
+                    yield Static("Audio transcriber to use: ")
+                    yield RadioSet(*(RadioButton(label, id=f"transcription_{value}") for label, value, _ in self.TRANSCRIPTION_OPTIONS), id="transcription_selector")
                         # yield Select(
                         #     options=self.TRANSCRIPTION_OPTIONS,
                         #     id="transcription_selector",
@@ -503,6 +509,11 @@ class RealtimeTranscribeToAI(App):
                         #     id="prompt_selector",
                         #     allow_blank=False
                         # )
+                    with VerticalScroll(id="model-management"):
+                        yield Static("Whisper Model Management:")
+                        yield ModelDownloadButton("ggml-base.en", "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin", "Download Base English Model")
+                        yield ModelDownloadButton("ggml-small.en", "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin", "Download Small English Model")
+                        # Add more model download buttons as needed
             with TabPane("Log", id="log-tab-pane"):
                 with VerticalScroll(id="log-vertical-scroll"):
                     yield Static("Awaiting logging information", id="log")       
@@ -559,25 +570,17 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
 
                              """)
 
-    def on_mount(self):
+    def on_mount(self) -> None:
+        self.update_transcription_options()
         
         # Set the first prompt option as default
         first_prompt_id = f"prompt_{self.PROMPT_OPTIONS[0][1]}"
-        self.query_one(f"#{first_prompt_id}", RadioButton).value = True
+        prompt_radio_button = self.query_one(f"#{first_prompt_id}", RadioButton)
+        if prompt_radio_button:
+            prompt_radio_button.value = True
         
-        # Set the first transcription option as default
-        first_transcription_id = f"transcription_{self.TRANSCRIPTION_OPTIONS[0][1]}"
-        self.query_one(f"#{first_transcription_id}", RadioButton).value = True
-        
-        # Initialize the transcription method
-        #self.transcriber = None
-        #self.transcription_method = "vosk"  # Default to Vosk
-        self.transcription_method = self.TRANSCRIPTION_OPTIONS[0][1]
-        #self.initialize_transcriber()
-
         self.audio_monitor = self.query_one(AudioLevelMonitor)
         self.devices = self.list_audio_devices()
-        #self.transcriber = AudioTranscriber()
         self.update_ai_status("Idle")
         self.ollama_api = OllamaAPI(host="http://192.168.1.81:11434", model="llama3.1:latest", app=self)
         self.stop_event = False
@@ -587,6 +590,8 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
         self.log_thread.start()
         self.start_new_session()
         self.set_timer(0.1, self.update_device_selector)
+        
+        # Set border titles for various components
         self.query_one("#transcription", TextArea).border_title = "Complete Transcription (editable)"
         self.query_one("#left-pane", VerticalScroll).border_title = "LLM Response"
         self.query_one("#partial", TextArea).border_title = "Partial Transcription"
@@ -594,6 +599,7 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
         self.query_one("#log-vertical-scroll", VerticalScroll).border_title = "Log"
         self.query_one("#audio-device-settings", VerticalScroll).border_title = "Audio Device"
         self.query_one("#prompt-settings", VerticalScroll).border_title = "LLM Prompt Engineering"
+        
         # Set up signal handling
         signal.signal(signal.SIGINT, self.handle_interrupt)
         #self.update_content_timer = self.set_interval(1/30, self.update_content)
@@ -614,34 +620,100 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
         # else:
         #     self.log("BlackHole 2ch not found. Please select an audio device manually.")
     
+    def on_model_download_button_download_complete(self, message: ModelDownloadButton.DownloadComplete):
+        self.notify(f"Model {message.model_name} downloaded successfully to {message.model_path}")
+        # Update the available models in the transcription options
+        self.update_transcription_options()
+
+    def on_model_download_button_download_progress(self, message: ModelDownloadButton.DownloadProgress):
+        # This method will be called when the download progress updates
+        # You can use it to update a global progress indicator if needed
+        pass
+
+    def update_transcription_options(self):
+        radio_set = self.query_one("#transcription_selector", RadioSet)
+        for button in radio_set.children:
+            option = next((opt for opt in self.TRANSCRIPTION_OPTIONS if f"transcription_{opt[1]}" == button.id), None)
+            if option:
+                button.disabled = not os.path.exists(option[2]) if option[2] else False
+        
+        if not radio_set.pressed_button or radio_set.pressed_button.disabled:
+            first_enabled = next((button for button in radio_set.children if not button.disabled), None)
+            if first_enabled:
+                first_enabled.value = True
+        
+        self.transcription_method = radio_set.pressed_button.id.split("_")[1] if radio_set.pressed_button else None
+
+
+    def _add_new_radio_set(self, settings_container):
+        # Create new radio buttons
+        new_radio_buttons = [
+            RadioButton(label, id=f"transcription_{value}")
+            for label, value, _ in self.TRANSCRIPTION_OPTIONS
+        ]
+        
+        # Create a new RadioSet and mount it
+        new_radio_set = RadioSet(*new_radio_buttons, id="transcription_selector")
+        settings_container.mount(new_radio_set)
+        
+        # Ensure a button is selected
+        if new_radio_buttons:
+            new_radio_set.press_button(new_radio_buttons[0])
+        
+        # Update the transcription method
+        self.transcription_method = new_radio_set.pressed_button.id.split("_")[1] if new_radio_set.pressed_button else self.TRANSCRIPTION_OPTIONS[0][1]
+
     def get_shortcuts(self) -> dict[str, str]:
         return {binding.key: binding.description for binding in self.BINDINGS}
     
     def initialize_transcriber(self):
+        logging.info(f"Initializing transcriber with method: {self.transcription_method}")
         transcription_info = next((option for option in self.TRANSCRIPTION_OPTIONS if option[1] == self.transcription_method), None)
         if transcription_info:
-            _, method, model_path = transcription_info
+            _, method, model_name = transcription_info
+            logging.info(f"Transcription info: method={method}, model_name={model_name}")
             if method == "vosk":
-                # Redirect stdout to our custom logger
+                logging.info("Initializing Vosk transcriber")
                 old_stdout = sys.stdout
                 sys.stdout = LogRedirector()
                 try:
                     self.transcriber = AudioTranscriber()
+                    logging.info("Vosk transcriber initialized successfully")
+                except Exception as e:
+                    logging.error(f"Error initializing Vosk transcriber: {e}")
                 finally:
-                    # Restore stdout
                     sys.stdout = old_stdout
             elif method == "google_cloud":
-                self.transcriber = AudioTranscriberGoogleCloud()
-            elif method == "whisper":
-                if model_path:
-                    self.transcriber = WhisperStreamTranscriber(model_path=model_path)
+                logging.info("Initializing Google Cloud transcriber")
+                try:
+                    self.transcriber = AudioTranscriberGoogleCloud()
+                    logging.info("Google Cloud transcriber initialized successfully")
+                except Exception as e:
+                    logging.error(f"Error initializing Google Cloud transcriber: {e}")
+            elif method.startswith("whisper"):
+                if model_name:
+                    model_path = os.path.join(get_model_directory(), model_name)
+                    logging.info(f"Initializing Whisper transcriber with model path: {model_path}")
+                    try:
+                        self.transcriber = WhisperStreamTranscriber(model_path=model_path)
+                        if self.transcriber.model is None:
+                            logging.error("Error: Failed to initialize Whisper model")
+                            return None
+                        logging.info("Whisper transcriber initialized successfully")
+                    except Exception as e:
+                        logging.error(f"Error initializing Whisper transcriber: {e}")
+                        return None
                 else:
-                    self.log("Error: Whisper model path not found")
+                    logging.error("Error: Whisper model not selected")
                     return None
-            self.log(f"Initialized transcriber: {method}")
+            else:
+                logging.error(f"Unknown transcription method: {method}")
+                return None
+
+            logging.info(f"Transcriber initialized: {method}")
             return self.transcriber
         else:
-            self.log(f"Error: Unknown transcription method {self.transcription_method}")
+            logging.error(f"Error: Unknown transcription method {self.transcription_method}")
             return None
 
     def on_radio_set_changed(self, event: RadioSet.Changed) -> None:
@@ -794,11 +866,18 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
         self.call_from_thread(update)
 
     def start_transcribing(self, device_index):
+        logging.info(f"Starting transcription with device index: {device_index}")
         if not self.transcriber:
-            self.initialize_transcriber()
+            logging.info("Transcriber not initialized, attempting to initialize...")
+            self.transcriber = self.initialize_transcriber()
         
         if self.transcriber:
-            self.transcriber.start_transcribing(device_index=device_index, transcription_callback=self.transcription_callback)
+            logging.info("Transcriber initialized, starting transcription...")
+            try:
+                self.transcriber.start_transcribing(device_index=device_index, transcription_callback=self.transcription_callback)
+                logging.info("Transcription started successfully")
+            except Exception as e:
+                logging.error(f"Error starting transcription: {e}")
         else:
             logging.error("Failed to initialize transcriber")
 

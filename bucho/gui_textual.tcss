@@ -42,3 +42,24 @@ Grid {
 Label {
     height: 100%;
 }
+
+ModelDownloadButton {
+    width: 100%;
+    height: auto;
+    margin: 1 0;
+}
+
+ModelDownloadButton Button {
+    width: 100%;
+    margin-bottom: 1;
+}
+
+ModelDownloadButton ProgressBar {
+    height: 1;
+    margin-bottom: 1;
+}
+
+ModelDownloadButton Static {
+    height: 1;
+    content-align: center middle;
+}

@@ -38,13 +38,13 @@ This application provides real-time audio transcription and analysis using Large
 
 1. Clone the repository:
    ```
-   git clone https://github.com/alexoms/audioAI.git
-   cd audioAI
+   git clone https://github.com/alexoms/bucho.git
+   cd bucho
    ```
 
 2. Install required dependencies:
    ```
-   pip install -r requirements.txt
+   pip install .
    ```
 
 3. Set up Ollama and ensure it's running on the specified host (default: http://localhost:11434)
@@ -56,15 +56,16 @@ This application provides real-time audio transcription and analysis using Large
 Run the application:
 
 ```
-python gui_textual.py
+bucho
 ```
 
-1. Select an audio input device from the available options.
-2. Choose the transcription method (Vosk or Google Cloud).
-3. Select a prompt template based on your use case.
-4. Start speaking, and the application will transcribe your audio in real-time.
-5. The LLM will process the transcription and provide responses.
-6. Use the various buttons to control the application, including pausing/resuming transcription, clearing data, and copying responses.
+1. Choose the transcription method (Whisper, Vosk or Google Cloud).
+2. Download a whisper model 
+3. Select an audio input device from the available options.
+4. Select a prompt template based on your use case.
+5. Start speaking, and the application will transcribe your audio in real-time.
+6. The LLM will process the transcription and provide responses.
+7. Use the various buttons to control the application, including pausing/resuming transcription, clearing data, and copying responses.
 
 ## Key Components
 

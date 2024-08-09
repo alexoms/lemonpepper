@@ -5,9 +5,11 @@ import threading
 import sounddevice as sd
 from pywhispercpp.model import Model
 import pywhispercpp.constants as constants
+import os
 
 class WhisperStreamTranscriber:
     def __init__(self, model_path, sample_rate=16000, channels=1, n_threads=8, block_size=4096, buffer_size=5):
+        logging.info(f"Initializing WhisperStreamTranscriber with model_path: {model_path}")
         self.model_path = model_path
         self.sample_rate = sample_rate
         self.channels = channels
@@ -33,6 +35,9 @@ class WhisperStreamTranscriber:
     def initialize_whisper(self):
         try:
             logging.info(f"Initializing Whisper with model path: {self.model_path}")
+            if not os.path.exists(self.model_path):
+                logging.error(f"Model file not found: {self.model_path}")
+                raise FileNotFoundError(f"Model file not found: {self.model_path}")
             self.model = Model(self.model_path,
                                n_threads=self.n_threads,
                                print_realtime=False,
@@ -42,7 +47,7 @@ class WhisperStreamTranscriber:
             logging.info("Whisper initialized successfully")
         except Exception as e:
             logging.error(f"Error initializing Whisper: {e}")
-            raise
+            self.model = None
 
     def whisper_worker(self):
         audio_data = np.array([])
