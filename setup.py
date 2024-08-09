@@ -15,7 +15,7 @@ requirements.append('appdirs')
 
 setup(
     name="lemonpepper",
-    version="0.1.0",
+    version="0.1.3",
     author="Unidatum Integrated Products LLC",
     author_email="alex.chang@unidatum.com",
     description="A real-time audio transcription and AI interaction tool",
@@ -37,6 +37,6 @@ setup(
     },
     include_package_data=True,
     package_data={
-        "lemonpepper": ["spinners.json"],
+        "lemonpepper": ["spinners.json", "gui_textual.tcss"],
     },
 )
