@@ -29,6 +29,7 @@ def excepthook(exc_type, exc_value, exc_traceback):
 
 sys.excepthook = excepthook
 
+import requests
 import uuid
 from datetime import datetime
 import numpy as np
@@ -37,6 +38,7 @@ from textual.widgets import Header, Footer, Static, Input, Button, ListView, Lis
 from textual.widget import Widget
 from textual.reactive import reactive
 from textual_slider import Slider
+from textual.worker import Worker, WorkerState
 import sounddevice as sd
 import signal
 import time
@@ -60,6 +62,8 @@ from textual.timer import Timer
 import threading
 from .utils import get_model_directory
 from .model_manager import ModelDownloadButton
+from textual import work
+import httpx
 
 class LogRedirector(io.StringIO):
     def write(self, string):
@@ -229,8 +233,16 @@ class AudioLevelMonitor(Static):
 
         result.append(f" L:{self.levels[0][0]:.0f}dB P:{self.levels[1][0]:.0f}dB")
         return result
-    
+
+            
 class LemonPepper(App):
+    ollama_host = reactive("http://localhost:11434")
+    class OllamaHostChanged(Message):
+        def __init__(self, host: str):
+            self.host = host
+            super().__init__()
+    
+
     #WHISPER_MODEL_PATH = "./whisper_models/ggml-base.en.bin"
     WHISPER_MODEL_PATH = "base.en"
     TRANSCRIPTION_OPTIONS = [
@@ -429,6 +441,7 @@ class LemonPepper(App):
     ]
 
     def __init__(self):
+        logging.info("Initializing LemonPepper")
         super().__init__()
         self.model_dir = get_model_directory()
         self.TRANSCRIPTION_OPTIONS = [
@@ -490,6 +503,12 @@ class LemonPepper(App):
   
             with TabPane("Settings", id="settings"):
                 with VerticalScroll(id="audio-device-settings"):
+                    yield Static("Ollama API Settings:")
+                    yield Input(placeholder="Ollama API Host", id="ollama_host", value=self.ollama_host)
+                    yield Button("Refresh Models", id="refresh_models", variant="primary")
+                    yield Select(options=[], id="ollama_model", prompt="Select Ollama Model")
+                    yield Button("Update Ollama Settings", id="update_ollama_settings")
+
                     yield Static("Audio input device to transcribe: ")
                     yield Select(id="device_selector", prompt="Select an audio input device", options=self.PROMPT_DEVICE_OPTIONS, allow_blank=True)
                     yield Static("Audio transcriber to use: ")
@@ -571,6 +590,7 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
                              """)
 
     def on_mount(self) -> None:
+        logging.info("LemonPepper mounted")
         self.update_transcription_options()
         
         # Set the first prompt option as default
@@ -599,7 +619,7 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
         self.query_one("#log-vertical-scroll", VerticalScroll).border_title = "Log"
         self.query_one("#audio-device-settings", VerticalScroll).border_title = "Audio Device"
         self.query_one("#prompt-settings", VerticalScroll).border_title = "LLM Prompt Engineering"
-        
+        self.update_ollama_models()
         # Set up signal handling
         signal.signal(signal.SIGINT, self.handle_interrupt)
         #self.update_content_timer = self.set_interval(1/30, self.update_content)
@@ -619,7 +639,68 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
         #     self.transcribe_thread.start()
         # else:
         #     self.log("BlackHole 2ch not found. Please select an audio device manually.")
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        if event.input.id == "ollama_host":
+            logging.info(f"Ollama host changed to: {event.value}")
+            self.ollama_host = event.value
+            self.post_message(self.OllamaHostChanged(event.value))
+
     
+    def on_lemon_pepper_ollama_host_changed(self, event: OllamaHostChanged) -> None:
+        logging.info(f"Updating Ollama host to: {event.host}")
+        self.ollama_host = event.host
+
+    @work(exclusive=True)
+    async def update_ollama_models(self) -> None:
+        """Update the Ollama models list."""
+        logging.info(f"Updating Ollama models from host: {self.ollama_host}")
+        model_select = self.query_one("#ollama_model", Select)
+        refresh_button = self.query_one("#refresh_models", Button)
+
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(f"{self.ollama_host}/api/tags")
+                response.raise_for_status()
+                data = response.json()
+                logging.info(f"Received JSON response: {json.dumps(data, indent=2)}")
+                models = data.get("models", [])
+                model_options = [(model["name"], model["name"]) for model in models]
+                model_select.set_options(model_options)
+                logging.info(f"Updated Select widget options: {model_options}")
+                self.notify("Model list updated successfully", severity="information")
+                logging.info(f"Model list updated successfully. Found {len(models)} models.")
+                logging.info(f"Model options: {model_options}")
+        except httpx.HTTPStatusError as e:
+            error_msg = f"Failed to fetch models: HTTP {e.response.status_code}"
+            logging.error(error_msg)
+            logging.error(f"Response content: {e.response.text}")
+            self.notify(error_msg, severity="error")
+        except httpx.RequestError as e:
+            error_msg = f"Error fetching models: {str(e)}"
+            logging.error(error_msg)
+            self.notify(error_msg, severity="error")
+        except json.JSONDecodeError as e:
+            error_msg = f"Error decoding JSON response: {str(e)}"
+            logging.error(error_msg)
+            logging.error(f"Raw response content: {response.text}")
+            self.notify(error_msg, severity="error")
+        finally:
+            refresh_button.disabled = False
+            refresh_button.label = "Refresh Models"
+
+    def _fetch_models_worker(self):
+        try:
+            response = requests.get(f"{self.ollama_host}/api/tags")
+            if response.status_code == 200:
+                models = response.json().get("models", [])
+                model_options = [(model["name"], model["name"]) for model in models]
+                return model_options, "success"
+            else:
+                return None, f"Failed to fetch models: HTTP {response.status_code}"
+        except requests.RequestException as e:
+            return None, f"Error fetching models: {str(e)}"
+
     def on_model_download_button_download_complete(self, message: ModelDownloadButton.DownloadComplete):
         self.notify(f"Model {message.model_name} downloaded successfully to {message.model_path}")
         # Update the available models in the transcription options
@@ -972,6 +1053,17 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
             self.resubmit_transcription()
         elif event.button.id == "copy_ai_response":
             self.copy_ai_response_to_clipboard()
+        elif event.button.id == "update_ollama_settings":
+            self.update_ollama_settings()
+        elif event.button.id == "refresh_models":
+            self.refresh_models()
+
+    def refresh_models(self) -> None:
+        logging.info(f"Refreshing models from host: {self.ollama_host}")
+        refresh_button = self.query_one("#refresh_models", Button)
+        refresh_button.disabled = True
+        refresh_button.label = "Refreshing..."
+        self.update_ollama_models()
 
     def copy_ai_response_to_clipboard(self):
         # Get the latest transcription
@@ -1034,7 +1126,15 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
         self.update_ollama_display()
         self.log("Transcription processed.")
     
-    
+    def update_ollama_settings(self):
+        host = self.query_one("#ollama_host", Input).value
+        model = self.query_one("#ollama_model", Select).value
+        if host and model:
+            self.ollama_api.update_settings(host, model)
+            self.notify("Ollama settings updated successfully")
+        else:
+            self.notify("Please provide both host and model", severity="warning")
+
 
     def start_new_session(self):
         # Create a parent ID
@@ -1116,12 +1216,19 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
         self.exit()
 
 def main():
-    app = LemonPepper()
+    logging.info("Starting LemonPepper application")
     try:
+        app = LemonPepper()
         app.run()
+    except Exception as e:
+        print(f"Unhandled exception in LemonPepper: {e}")
+        print(traceback.format_exc())
     except KeyboardInterrupt:
         print("\nReceived interrupt signal. Shutting down...")
         app.exit()
+    finally:
+        logging.info("LemonPepper application exited")
+
 
 if __name__ == "__main__":
     main()

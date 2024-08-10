@@ -4,6 +4,7 @@ from threading import Lock
 
 class OllamaAPI:
     def __init__(self, host="http://localhost:11434", model="llama2", app=None):
+        self.host = host
         self.model = model
         self.client = ollama.Client(host=host)
         self.transcription_buffer = []
@@ -26,6 +27,11 @@ class OllamaAPI:
         self.current_prompt = "default"
         self.app = app
 
+    def update_settings(self, host, model):
+        self.host = host
+        self.model = model
+        self.client = ollama.Client(host=host)
+        
     # fix mistranscriptions using the context of the transcript and based on potential phonetic issues. I asked it to replace transcribed words that don't make sense with "[unintelligable]"        
 
     def default_prompt(self, transcription):
