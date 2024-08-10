@@ -107,20 +107,20 @@ class CustomFooter(Footer):
         yield self.left_bar
         yield self.spinner
         yield self.status_message
-        #yield self.shortcuts
         yield Static("", id="footer-spacer-left")
-        
+        yield self.shortcuts
         yield Static("", id="footer-spacer-right")
         yield AudioLevelMonitor(id="audio-monitor")
     
     def on_mount(self):
-        self.update_shortcuts()
+        self.update_highlights()
         
     
     
     def update_shortcuts(self):
         shortcuts = self.app.get_shortcuts()
         shortcut_text = " ".join(f"[{key}]{action}" for key, action in shortcuts.items())
+        logging.info(f"Shortcut array: {shortcuts.items()}")
         self.shortcuts.update(shortcut_text)
 
     def update_highlights(self) -> None:
@@ -131,11 +131,11 @@ class CustomFooter(Footer):
         text = Text()
         for key in highlight_keys:
             text.append(f" {key} ", "reverse")
-            text.append(f" {shortcuts[key]} ", "bold")
+            text.append(f" {shortcuts[key]}      ", "bold")
         
         for key in non_highlight_keys:
             text.append(f" {key} ", "dim")
-            text.append(f" {shortcuts[key]} ", "")
+            text.append(f" {shortcuts[key]}", "")
         
         self.shortcuts.update(text)
 
@@ -435,7 +435,6 @@ class LemonPepper(App):
     }
     #shortcuts {
         width: auto;
-        background: $primary-background;
         color: $text;
         content-align: left middle;
         padding-left: 1;
