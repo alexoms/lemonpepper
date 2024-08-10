@@ -87,6 +87,7 @@ class CustomFooter(Footer):
     def __init__(self):
         super().__init__()
         self.status_message = Static("Idle", id="ai-status")
+        self.left_bar = Static("", id="left_bar")
         self.spinner = Static("", id="spinner")
         self.shortcuts = Static("", id="shortcuts")
         self.spinner_thread = None
@@ -103,6 +104,7 @@ class CustomFooter(Footer):
         self.current_spinner = self.spinners["dots"]
 
     def compose(self):
+        yield self.left_bar
         yield self.spinner
         yield self.status_message
         #yield self.shortcuts
@@ -113,6 +115,8 @@ class CustomFooter(Footer):
     
     def on_mount(self):
         self.update_shortcuts()
+        
+    
     
     def update_shortcuts(self):
         shortcuts = self.app.get_shortcuts()
@@ -141,12 +145,28 @@ class CustomFooter(Footer):
         self.update_highlights()
         
     def update_status(self, message: str):
+        text2 = Text()
+        # Left angle bracket
+        text2.append("\uE0B6", Style(color="#162a33", bgcolor="#292828"))
+        text2.append(" ", Style(color="#223a45", bgcolor="#223a45"))
+        self.left_bar.update(text2)
         #colored_text = Text()
         #colors = ["red", "green", "yellow", "blue", "magenta", "cyan"]
         #for i, char in enumerate(message):
         #    colored_text.append(char, Style(color=colors[i % len(colors)]))
         #self.status_message.update(colored_text)
-        self.status_message.update(message)
+        text = Text()
+        # Left angle bracket
+        #text.append("\uE0B6", Style(color="#162a33", bgcolor="#292828"))
+        # Spinner and Status
+        #text.append(f" {self.spinner} ", Style(color="#f199f2", bgcolor="#223a45", bold=True))
+        #text.append("", Style(color="#192f52", bgcolor="#223a45"))
+        text.append(f" {message}   ", Style(color="#65d67b", bgcolor="#223a45", bold=True))
+        # Right angle bracket
+        text.append("\uE0B0", Style(color="#162a33", bgcolor="#292828"))
+        self.status_message.update(text)
+
+        #self.status_message.update(message)
         
         if message == "Waiting for LLM response...":
             self.start_spinner()
@@ -386,18 +406,22 @@ class LemonPepper(App):
     #ai-status {
         width: auto;
         min-width: 30;
-        padding-left: 1;
+        
         content-align: left middle;
-        background: $boost;
+        
     }
     #footer-spacer-left, #footer-spacer-right {
         width: 1fr;
     }
+    #left_bar {
+       width: auto;
+       content-align: left middle;
+    }
     #spinner {
         width: auto;
-        min-width: 3;
+        
         content-align: center middle;
-        background: $boost;
+        background: #223a45;
         color: #FF69B4;  /* Hot pink color */
     }
     #audio-monitor {
@@ -405,13 +429,13 @@ class LemonPepper(App):
         min-width: 90;  # Adjust this value as needed
         height: 100%;
         border: none;
-        background: $boost;
+        
         color: $text;
         content-align: right middle;
     }
     #shortcuts {
         width: auto;
-        background: $boost;
+        background: $primary-background;
         color: $text;
         content-align: left middle;
         padding-left: 1;
