@@ -19,9 +19,9 @@ This application provides real-time audio transcription and analysis using Large
 
 - Python 3.7+
 - Ollama (for local LLM integration)
-- Whisper (for offline speech recognition).  Audio language models can be downloaded at https://huggingface.co/ggerganov/whisper.cpp/tree/main
-- Vosk (for offline speech recognition).  Audio language models can be downloaded at https://alphacephei.com/vosk/models
-- Google Cloud SDK (for Google Cloud Speech-to-Text, optional)
+- Whisper (for offline speech recognition).  
+- Optional...Vosk (for offline speech recognition).  Audio language models can be downloaded at https://alphacephei.com/vosk/models
+- Optional...Google Cloud SDK (for Google Cloud Speech-to-Text, optional)
 
 - Headset/microphone (supports bluetooth)
 - Software audio loopback for mixing microphone and other audio source such as from a browser or video conferencing tool 
@@ -69,7 +69,7 @@ lemonpepper
 5. If you do not see any models, then log into your ollama server and make sure to pull a model from their library (https://ollama.com/library).  llama3.1 seems to work well.
 6. Choose a model when you can see a selection from the selection menu.
 7. Click on Update Ollama Settings.
-8. Download a whisper model by clicking Download Base English Model button.  You should see a download progress bar.  Once completed, it will download the whisper transcription model locally.
+8. Download a whisper model by clicking Download Base English Model button.  You should see a download progress bar.  Once completed, it will download the whisper transcription model locally.  It downloads from https://huggingface.co/ggerganov/whisper.cpp/tree/main
 9. Choose the transcription method.  We prefer OpenAI Whisper base.en.
 10. Select an audio input device from the available options.  We prefer BlackHole 2ch after installing BlackHole and mac Loopback and mixing audio from the browser+microphone into the BlackHole 2ch.
 11. Select a prompt template based on your use case.
