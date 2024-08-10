@@ -51,9 +51,8 @@ This application provides real-time audio transcription and analysis using Large
    pip install .
    ```
 
-3. Set up Ollama and ensure it's running on the specified host (default: http://localhost:11434)
+3. Download and setup Ollama (https://ollama.com/) with your desired LLM (https://ollama.com/library) and ensure it's running on the specified host (default: http://localhost:11434)
 
-4. If using Google Cloud Speech-to-Text, set up your Google Cloud credentials
 
 ## Usage
 
@@ -63,13 +62,22 @@ Run the application:
 lemonpepper
 ```
 
-1. Choose the transcription method (Whisper, Vosk or Google Cloud).
-2. Download a whisper model 
-3. Select an audio input device from the available options.
-4. Select a prompt template based on your use case.
-5. Start speaking, and the application will transcribe your audio in real-time.
-6. The LLM will process the transcription and provide responses.
-7. Use the various buttons to control the application, including pausing/resuming transcription, clearing data, and copying responses.
+1. Click on the settings tab
+2. Point to the ollama server that you have installed already.  The value of the Ollama API Settings form field is preset to http://localhost:11434.  You can change it to another host by editing the form field and changing the localhost to the ip address if you have install ollama to a different machine.
+3. If you change the host name, click on the Refresh Models button under the hostname to pull the list of llm models that this ollama server has available.
+4. Click on the Select Ollama Model dropdown and it should show an updated list of available models
+5. If you do not see any models, then log into your ollama server and make sure to pull a model from their library (https://ollama.com/library).  llama3.1 seems to work well.
+6. Choose a model when you can see a selection from the selection menu.
+7. Click on Update Ollama Settings.
+8. Download a whisper model by clicking Download Base English Model button.  You should see a download progress bar.  Once completed, it will download the whisper transcription model locally.
+9. Choose the transcription method.  We prefer OpenAI Whisper base.en.
+10. Select an audio input device from the available options.  We prefer BlackHole 2ch after installing BlackHole and mac Loopback and mixing audio from the browser+microphone into the BlackHole 2ch.
+11. Select a prompt template based on your use case.
+12. Click on the Home tab
+13. Start speaking or playing audio from a browser, and the application will transcribe your audio in real-time.
+14. The LLM will process the transcription and provide responses.
+15. Use the various buttons to control the application, including pausing/resuming transcription, clearing data, and copying responses.
+16. Check the Log tab if you there is something wrong and need to debug
 
 ## Key Components
 
