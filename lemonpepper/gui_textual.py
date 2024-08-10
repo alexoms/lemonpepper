@@ -64,6 +64,7 @@ from .utils import get_model_directory
 from .model_manager import ModelDownloadButton
 from textual import work
 import httpx
+import appdirs
 
 class LogRedirector(io.StringIO):
     def write(self, string):
@@ -444,6 +445,7 @@ class LemonPepper(App):
         logging.info("Initializing LemonPepper")
         super().__init__()
         self.model_dir = get_model_directory()
+        logging.info(f"model directory: {self.model_dir}")
         self.TRANSCRIPTION_OPTIONS = [
             ("OpenAI Whisper base.en", "whisper_base_en", os.path.join(self.model_dir, "ggml-base.en.bin")),
             ("OpenAI Whisper small.en", "whisper_small_en", os.path.join(self.model_dir, "ggml-small.en.bin")),
@@ -451,9 +453,13 @@ class LemonPepper(App):
             ("Google Cloud", "google_cloud", None)
         ]
         self.devices = self.list_audio_devices()
-        self.selected_device = "No device selected"
+        self.selected_device = Select.BLANK
         self.transcriber = None
         self.transcription_method = self.TRANSCRIPTION_OPTIONS[0][1]  # Default to the first option
+        self.settings = self.load_settings()
+        self.ollama_host = self.settings.get("ollama_host", "http://localhost:11434")
+        self.saved_ollama_model = None
+        self.saved_device = None
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -504,11 +510,21 @@ class LemonPepper(App):
             with TabPane("Settings", id="settings"):
                 with VerticalScroll(id="audio-device-settings"):
                     yield Static("Ollama API Settings:")
-                    yield Input(placeholder="Ollama API Host", id="ollama_host", value=self.ollama_host)
+                    yield Input(placeholder="Ollama API Host", id="ollama_host", value=self.settings.get("ollama_host", "http://localhost:11434"))
                     yield Button("Refresh Models", id="refresh_models", variant="primary")
-                    yield Select(options=[], id="ollama_model", prompt="Select Ollama Model")
+                    # Update the Ollama model Select widget initialization
+                    ollama_model = self.settings.get("ollama_model", "")
+                    yield Select(
+                        options=[],  # We'll populate this later in on_mount
+                        id="ollama_model",
+                        allow_blank=True,
+                        prompt="Select Ollama Model",
+                    )
                     yield Button("Update Ollama Settings", id="update_ollama_settings")
-
+                    #yield Input(placeholder="Ollama API Host", id="ollama_host", value=self.settings.get("ollama_host", "http://localhost:11434"))
+                    #yield Select(options=[], id="ollama_model", value=Select.BLANK, prompt="Select Ollama Model")
+                    #yield Select(id="device_selector", prompt="Select an audio input device", options=self.PROMPT_DEVICE_OPTIONS, value=Select.BLANK)
+        
                     yield Static("Audio input device to transcribe: ")
                     yield Select(id="device_selector", prompt="Select an audio input device", options=self.PROMPT_DEVICE_OPTIONS, allow_blank=True)
                     yield Static("Audio transcriber to use: ")
@@ -533,6 +549,7 @@ class LemonPepper(App):
                         yield ModelDownloadButton("ggml-base.en", "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin", "Download Base English Model")
                         yield ModelDownloadButton("ggml-small.en", "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin", "Download Small English Model")
                         # Add more model download buttons as needed
+                    yield Button("Save Settings", id="save_settings", variant="primary")
             with TabPane("Log", id="log-tab-pane"):
                 with VerticalScroll(id="log-vertical-scroll"):
                     yield Static("Awaiting logging information", id="log")       
@@ -588,6 +605,21 @@ This is a command-line tool for transcribing audio feeds and packaging the trans
 into pre-made large language model (LLM) prompt templates and capturing the responses from the LLMs.    
 
                              """)
+            # # Update the Settings tab to show current values
+            # yield Input(placeholder="Ollama API Host", id="ollama_host", value=self.settings.get("ollama_host", self.ollama_host))
+            # yield Select(options=[], id="ollama_model", value=self.settings.get("ollama_model", ""), prompt="Select Ollama Model")
+            
+            # # Update the device selector
+            # yield Select(id="device_selector", prompt="Select an audio input device", options=self.PROMPT_DEVICE_OPTIONS, value=self.settings.get("selected_device", ""))
+            
+            # # Update the transcription selector
+            # for label, value, _ in self.TRANSCRIPTION_OPTIONS:
+            #     yield RadioButton(label, id=f"transcription_{value}", value=(value == self.settings.get("transcription_method", self.transcription_method)))
+
+            # # Update the prompt selector
+            # for label, value in self.PROMPT_OPTIONS:
+            #     yield RadioButton(label, id=f"prompt_{value}", value=(value == self.settings.get("current_prompt", "default")))
+
 
     def on_mount(self) -> None:
         logging.info("LemonPepper mounted")
@@ -619,9 +651,15 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
         self.query_one("#log-vertical-scroll", VerticalScroll).border_title = "Log"
         self.query_one("#audio-device-settings", VerticalScroll).border_title = "Audio Device"
         self.query_one("#prompt-settings", VerticalScroll).border_title = "LLM Prompt Engineering"
+        # Populate Ollama model options and set value
         self.update_ollama_models()
+        self.apply_saved_settings()
+        self.update_device_selector()
+        # Apply saved settings after populating options
+        #self.apply_saved_settings()
         # Set up signal handling
         signal.signal(signal.SIGINT, self.handle_interrupt)
+        
         #self.update_content_timer = self.set_interval(1/30, self.update_content)
         
         # Find and set BlackHole 2ch as default if it exists
@@ -640,20 +678,54 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
         # else:
         #     self.log("BlackHole 2ch not found. Please select an audio device manually.")
 
+    def apply_saved_settings(self):
+        # Apply Ollama host setting
+        ollama_host_input = self.query_one("#ollama_host", Input)
+        ollama_host_input.value = self.settings.get("ollama_host", "http://localhost:11434")
+
+        # For Ollama model, we'll set it after the options are populated
+        self.saved_ollama_model = self.settings.get("ollama_model")
+
+        # For device selection, we'll set it after the options are populated
+        self.saved_device = self.settings.get("selected_device")
+
+        # Apply transcription method
+        self.transcription_method = self.settings.get("transcription_method", self.TRANSCRIPTION_OPTIONS[0][1])
+        transcription_radio = self.query_one(f"#transcription_{self.transcription_method}", RadioButton)
+        if transcription_radio:
+            transcription_radio.value = True
+        else:
+            # If the saved transcription method is not found, set to the first available option
+            first_option = self.query_one("#transcription_selector RadioButton")
+            if first_option:
+                first_option.value = True
+                self.transcription_method = first_option.id.split("_")[1]
+
+        # Apply prompt settings
+        current_prompt = self.settings.get("current_prompt", "default")
+        prompt_radio = self.query_one(f"#prompt_{current_prompt}", RadioButton)
+        if prompt_radio:
+            prompt_radio.value = True
+
+        # Log the loaded settings
+        logging.info(f"Loaded settings: {self.settings}")
+        logging.info(f"Current transcription method: {self.transcription_method}")
+
     def on_input_changed(self, event: Input.Changed) -> None:
         if event.input.id == "ollama_host":
-            logging.info(f"Ollama host changed to: {event.value}")
-            self.ollama_host = event.value
-            self.post_message(self.OllamaHostChanged(event.value))
-
+            if self.ollama_host != event.value:
+                logging.info(f"Ollama host changed from {self.ollama_host} to: {event.value}")
+                self.ollama_host = event.value
+                self.settings["ollama_host"] = event.value
+                self.unsaved_changes = True
+                self.post_message(self.OllamaHostChanged(event.value))
     
-    def on_lemon_pepper_ollama_host_changed(self, event: OllamaHostChanged) -> None:
-        logging.info(f"Updating Ollama host to: {event.host}")
-        self.ollama_host = event.host
+    #def on_lemon_pepper_ollama_host_changed(self, event: OllamaHostChanged) -> None:
+    #    logging.info(f"Updating Ollama host to: {event.host}")
+    #    self.ollama_host = event.host
 
     @work(exclusive=True)
     async def update_ollama_models(self) -> None:
-        """Update the Ollama models list."""
         logging.info(f"Updating Ollama models from host: {self.ollama_host}")
         model_select = self.query_one("#ollama_model", Select)
         refresh_button = self.query_one("#refresh_models", Button)
@@ -666,11 +738,21 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
                 logging.info(f"Received JSON response: {json.dumps(data, indent=2)}")
                 models = data.get("models", [])
                 model_options = [(model["name"], model["name"]) for model in models]
+
+                model_select = self.query_one("#ollama_model", Select)
                 model_select.set_options(model_options)
                 logging.info(f"Updated Select widget options: {model_options}")
+                
+                # Apply saved Ollama model setting after options are populated
+                if self.saved_ollama_model and self.saved_ollama_model in dict(model_options):
+                    model_select.value = self.saved_ollama_model
+                    logging.info(f"Applied saved Ollama model: {self.saved_ollama_model}")
+                else:
+                    model_select.value = Select.BLANK
+                    logging.info("No saved Ollama model applied")
+
                 self.notify("Model list updated successfully", severity="information")
                 logging.info(f"Model list updated successfully. Found {len(models)} models.")
-                logging.info(f"Model options: {model_options}")
         except httpx.HTTPStatusError as e:
             error_msg = f"Failed to fetch models: HTTP {e.response.status_code}"
             logging.error(error_msg)
@@ -759,6 +841,7 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
                 sys.stdout = LogRedirector()
                 try:
                     self.transcriber = AudioTranscriber()
+                    self.transcriber.transcription_method = method
                     logging.info("Vosk transcriber initialized successfully")
                 except Exception as e:
                     logging.error(f"Error initializing Vosk transcriber: {e}")
@@ -768,6 +851,7 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
                 logging.info("Initializing Google Cloud transcriber")
                 try:
                     self.transcriber = AudioTranscriberGoogleCloud()
+                    self.transcriber.transcription_method = method
                     logging.info("Google Cloud transcriber initialized successfully")
                 except Exception as e:
                     logging.error(f"Error initializing Google Cloud transcriber: {e}")
@@ -777,6 +861,7 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
                     logging.info(f"Initializing Whisper transcriber with model path: {model_path}")
                     try:
                         self.transcriber = WhisperStreamTranscriber(model_path=model_path)
+                        self.transcriber.transcription_method = method
                         if self.transcriber.model is None:
                             logging.error("Error: Failed to initialize Whisper model")
                             return None
@@ -801,18 +886,103 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
         if event.radio_set.id == "prompt_selector":
             selected_value = event.pressed.id.split("_", 1)[1]  # Extract value from radio button id
             self.ollama_api.set_prompt(selected_value)
+            self.settings["current_prompt"] = selected_value
+            self.unsaved_changes = True
             self.log(f"Changed prompt to: {event.pressed.label}")
         elif event.radio_set.id == "transcription_selector":
             selected_value = event.pressed.id.split("_", 1)[1]
-            if selected_value != self.transcription_method:
-                self.transcription_method = selected_value
-                if self.transcriber:
-                    self.transcriber.stop_transcribing()
-                self.transcriber = None  # Reset the transcriber
-                self.log(f"Changed transcription method to: {event.pressed.label}")
-            else:
-                self.log(f"Transcription method unchanged: {event.pressed.label}")
+            self.transcription_method = selected_value
+            self.settings["transcription_method"] = selected_value
+            self.unsaved_changes = True
+            if self.transcriber:
+                self.transcriber.stop_transcribing()
+            self.transcriber = None  # Reset the transcriber
+            logging.info(f"Changed transcription method to: {event.pressed.label}")
+            logging.info(f"Current transcription method: {self.transcription_method}")
 
+        # if event.radio_set.id == "prompt_selector":
+        #     selected_value = event.pressed.id.split("_", 1)[1]  # Extract value from radio button id
+        #     self.ollama_api.set_prompt(selected_value)
+        #     self.settings["current_prompt"] = selected_value
+        #     self.unsaved_changes = True
+        #     self.log(f"Changed prompt to: {event.pressed.label}")
+        # elif event.radio_set.id == "transcription_selector":
+        #     selected_value = event.pressed.id.split("_", 1)[1]
+        #     if selected_value != self.transcription_method:
+        #         self.transcription_method = selected_value
+        #         self.settings["transcription_method"] = selected_value
+        #         self.unsaved_changes = True
+        #         if self.transcriber:
+        #             self.transcriber.stop_transcribing()
+        #         self.transcriber = None  # Reset the transcriber
+        #         logging.info(f"Changed transcription method to: {event.pressed.label}")
+        #     else:
+        #         logging.info(f"Transcription method unchanged: {event.pressed.label}")
+
+    def save_settings(self):
+        if not self.unsaved_changes:
+            logging.info("No changes to save")
+            return
+
+        settings_dir = appdirs.user_config_dir("lemonpepper", "UnidatumIntegratedProductsLLC")
+        os.makedirs(settings_dir, exist_ok=True)
+        settings_file = os.path.join(settings_dir, "settings.json")
+        
+        # Convert Select.BLANK to None for JSON serialization
+        serializable_settings = {
+            k: (None if v is Select.BLANK else v) for k, v in self.settings.items()
+        }
+        
+        try:
+            with open(settings_file, "w") as f:
+                json.dump(serializable_settings, f, indent=2)
+            logging.info(f"Settings saved successfully to {settings_file}")
+            logging.info(f"Saved settings: {serializable_settings}")
+            self.unsaved_changes = False
+        except IOError as e:
+            logging.error(f"Error saving settings to {settings_file}: {e}")
+
+
+    def load_settings(self):
+        settings_dir = appdirs.user_config_dir("lemonpepper", "UnidatumIntegratedProductsLLC")
+        settings_file = os.path.join(settings_dir, "settings.json")
+        
+        default_settings = {
+            "ollama_host": "http://localhost:11434",
+            "ollama_model": Select.BLANK,
+            "selected_device": Select.BLANK,
+            "transcription_method": self.TRANSCRIPTION_OPTIONS[0][1],
+            "current_prompt": "default"
+        }
+        
+        if os.path.exists(settings_file):
+            try:
+                with open(settings_file, "r") as f:
+                    loaded_settings = json.load(f)
+                
+                # Convert None back to Select.BLANK for relevant fields
+                if loaded_settings.get("ollama_model") is None:
+                    loaded_settings["ollama_model"] = Select.BLANK
+                if loaded_settings.get("selected_device") is None:
+                    loaded_settings["selected_device"] = Select.BLANK
+                
+                # Merge loaded settings with default settings
+                default_settings.update(loaded_settings)
+                
+            except json.JSONDecodeError as e:
+                logging.error(f"Error decoding settings file: {e}")
+                logging.info("Using default settings")
+                # Rename the corrupted file
+                os.rename(settings_file, settings_file + ".corrupted")
+                logging.info(f"Renamed corrupted settings file to {settings_file}.corrupted")
+            except IOError as e:
+                logging.error(f"Error reading settings file: {e}")
+                logging.info("Using default settings")
+        else:
+            logging.info("Settings file not found. Using default settings")
+        
+        return default_settings
+    
     def find_blackhole_2ch(self):
         devices = sd.query_devices()
         for i, device in enumerate(devices):
@@ -892,9 +1062,17 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
         selector = self.query_one("#device_selector", Select)
         logging.debug(f"Updating selector with options: {device_options}")
         selector.options = self.PROMPT_DEVICE_OPTIONS
+        
+        # Apply saved device setting after options are populated
+        if isinstance(self.saved_device, int) and 0 <= self.saved_device < len(selector.options):
+            selector.value = self.saved_device
+            logging.info(f"Applied saved device: {self.devices[self.saved_device]}")
+        else:
+            selector.value = Select.BLANK
+            logging.info("No saved device applied or invalid saved device")
+        
         logging.debug(f"Selector options after update: {selector.options}")
         selector.refresh()
-        selector = Select(options=device_options, id="device_selector", prompt="Select an audio input device")
         
 
     def list_audio_devices(self):
@@ -902,29 +1080,6 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
         return [f"{i}: {device['name']} (in: {device['max_input_channels']}, out: {device['max_output_channels']})"
                 for i, device in enumerate(devices)]
 
-    def on_select_changed(self, event: Select.Changed) -> None:
-        if event.select.id == "transcription_selector":
-            self.transcription_method = event.value
-            if self.transcription_method == "vosk":
-                self.transcriber = AudioTranscriber()
-            elif self.transcription_method == "google_cloud":
-                self.transcriber = AudioTranscriberGoogleCloud()
-            self.log(f"Changed transcription method to: {self.transcription_method}")
-        elif event.select.id == "device_selector":
-            selected_device_index = event.value
-            self.selected_device = self.devices[selected_device_index]
-            logging.info(f"Selected device: {self.selected_device}")
-
-            #blackhole_index = self.transcriber.get_blackhole_16ch_index()
-            #device_index = blackhole_index if blackhole_index is not None else selected_device_index
-
-            #self.query_one("#device").update(f"Selected Device: {self.selected_device}")
-            self.transcribe_thread = Thread(target=self.start_transcribing, args=(selected_device_index,), daemon=True)
-            self.transcribe_thread.start()
-        elif event.select.id == "prompt_selector":
-            # Existing code for prompt selection
-            self.ollama_api.set_prompt(event.value)
-            self.log(f"Changed prompt to: {event.value}")
 
     def transcription_callback(self, text, is_partial=False):
         def update():
@@ -948,8 +1103,10 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
 
     def start_transcribing(self, device_index):
         logging.info(f"Starting transcription with device index: {device_index}")
-        if not self.transcriber:
-            logging.info("Transcriber not initialized, attempting to initialize...")
+        logging.info(f"Current transcription method: {self.transcription_method}")
+        
+        if not self.transcriber or self.transcriber.transcription_method != self.transcription_method:
+            logging.info("Transcriber not initialized or method changed, initializing...")
             self.transcriber = self.initialize_transcriber()
         
         if self.transcriber:
@@ -1009,17 +1166,50 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
         logging.info("Update log thread stopped.")
 
     def on_select_changed(self, event: Select.Changed) -> None:
-        if event.select.id == "device_selector":
-            selected_device_index = event.value
-            self.selected_device = self.devices[selected_device_index]
-            logging.info(f"Selected device: {self.selected_device}")
-            #self.query_one("#device").update(f"Selected Device: {self.selected_device}")
-            self.transcribe_thread = Thread(target=self.start_transcribing, args=(selected_device_index,), daemon=True)
-            self.transcribe_thread.start()
+        if event.select.id == "ollama_model":
+            self.settings["ollama_model"] = event.value
+            self.unsaved_changes = True
+            logging.info(f"Ollama model changed to: {event.value}")
+        elif event.select.id == "device_selector":
+            if event.value is not Select.BLANK:
+                selected_device_index = event.value
+                self.selected_device = self.devices[selected_device_index]
+                logging.info(f"Selected device: {event.value}")
+                self.settings["selected_device"] = event.value
+                logging.info(f"Changed device_selector to: {self.selected_device}")
+                self.unsaved_changes = True
+                self.transcribe_thread = Thread(target=self.start_transcribing, args=(selected_device_index,), daemon=True)
+                self.transcribe_thread.start()
+            else:
+                self.settings["selected_device"] = None
+                logging.info("No device selected")
         elif event.select.id == "prompt_selector":
             # Existing code for prompt selection
             self.ollama_api.set_prompt(event.value)
+            self.unsaved_changes = True
             self.log(f"Changed prompt to: {event.value}")
+        elif event.select.id == "transcription_selector":
+            self.transcription_method = event.value
+            if self.transcription_method == "vosk":
+                self.transcriber = AudioTranscriber()
+            elif self.transcription_method == "google_cloud":
+                self.transcriber = AudioTranscriberGoogleCloud()
+            self.settings["transcription_selector"] = event.value
+            self.unsaved_changes = True
+            self.log(f"Changed transcription method to: {self.transcription_method}")        
+
+    # def on_select_changed(self, event: Select.Changed) -> None:
+    #     if event.select.id == "device_selector":
+    #         selected_device_index = event.value
+    #         self.selected_device = self.devices[selected_device_index]
+    #         logging.info(f"Selected device: {self.selected_device}")
+    #         #self.query_one("#device").update(f"Selected Device: {self.selected_device}")
+    #         self.transcribe_thread = Thread(target=self.start_transcribing, args=(selected_device_index,), daemon=True)
+    #         self.transcribe_thread.start()
+    #     elif event.select.id == "prompt_selector":
+    #         # Existing code for prompt selection
+    #         self.ollama_api.set_prompt(event.value)
+    #         self.log(f"Changed prompt to: {event.value}")
 
     def on_button_pressed(self, event: Button.Pressed):
         if event.button.id == "pause_button":
@@ -1057,6 +1247,10 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
             self.update_ollama_settings()
         elif event.button.id == "refresh_models":
             self.refresh_models()
+        elif event.button.id == "save_settings":
+            self.save_settings()
+            self.unsaved_changes = False
+            self.notify("Settings saved successfully")
 
     def refresh_models(self) -> None:
         logging.info(f"Refreshing models from host: {self.ollama_host}")
@@ -1064,6 +1258,7 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
         refresh_button.disabled = True
         refresh_button.label = "Refreshing..."
         self.update_ollama_models()
+        self.save_settings()
 
     def copy_ai_response_to_clipboard(self):
         # Get the latest transcription
@@ -1131,6 +1326,9 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
         model = self.query_one("#ollama_model", Select).value
         if host and model:
             self.ollama_api.update_settings(host, model)
+            self.settings["ollama_host"] = host
+            self.settings["ollama_model"] = model
+            self.save_settings()
             self.notify("Ollama settings updated successfully")
         else:
             self.notify("Please provide both host and model", severity="warning")
