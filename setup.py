@@ -15,7 +15,7 @@ requirements.append('appdirs')
 
 setup(
     name="lemonpepper",
-    version="0.1.5",
+    version="0.1.6",
     author="Unidatum Integrated Products LLC",
     author_email="alex.chang@unidatum.com",
     description="A real-time audio transcription and AI interaction tool",
