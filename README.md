@@ -79,7 +79,7 @@ lemonpepper
 
 ### Optional - Settings tab - Enter Picovoice Orca to enable text to speech for reading LLM output out loud
 1.  Go to https://picovoice.ai/platform/orca/
-2.  Create an account and generate an AccessKey
+2.  Create a free account and generate an AccessKey.  It has a limit of 10M characters but that should be enough.  This will require an internet connection for local usage as they verify the access key that way.  This functionality is experimental for now.  If it becomes a blocker, we will choose another TTS engine that does not have these constraints.
 3.  Paste the AccessKey into the input field in the settings tab and click Save Settings
 
 ## Key Components
