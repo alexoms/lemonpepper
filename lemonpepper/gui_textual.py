@@ -49,7 +49,6 @@ from textual.message import Message
 from rich.markdown import Markdown as RichMarkdown
 from .ollama_api import OllamaAPI
 from .transcribe_audio import AudioTranscriber
-from .transcribe_audio_google_cloud import AudioTranscriberGoogleCloud
 from .transcribe_audio_whisper import WhisperStreamTranscriber
 from .PicovoiceOrcaStreamer import PicovoiceOrcaStreamer
 from rich.console import Console
@@ -270,8 +269,7 @@ class LemonPepper(App):
     WHISPER_MODEL_PATH = "base.en"
     TRANSCRIPTION_OPTIONS = [
         ("OpenAI Whisper", "whisper", WHISPER_MODEL_PATH),
-        ("Alpha Cephei Vosk", "vosk", None),
-        ("Google Cloud", "google_cloud", None)
+        ("Alpha Cephei Vosk", "vosk", None)
     ]
     CSS_PATH = "gui_textual.tcss"
     BINDINGS = [
@@ -494,8 +492,7 @@ class LemonPepper(App):
         self.TRANSCRIPTION_OPTIONS = [
             ("OpenAI Whisper base.en", "whisper_base_en", os.path.join(self.model_dir, "ggml-base.en.bin")),
             ("OpenAI Whisper small.en", "whisper_small_en", os.path.join(self.model_dir, "ggml-small.en.bin")),
-            ("Alpha Cephei Vosk", "vosk", None),
-            ("Google Cloud", "google_cloud", None)
+            ("Alpha Cephei Vosk", "vosk", None)
         ]
         self.devices = self.list_audio_devices()
         self.selected_device = Select.BLANK
@@ -909,14 +906,6 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
                     logging.error(f"Error initializing Vosk transcriber: {e}")
                 finally:
                     sys.stdout = old_stdout
-            elif method == "google_cloud":
-                logging.info("Initializing Google Cloud transcriber")
-                try:
-                    self.transcriber = AudioTranscriberGoogleCloud()
-                    self.transcriber.transcription_method = method
-                    logging.info("Google Cloud transcriber initialized successfully")
-                except Exception as e:
-                    logging.error(f"Error initializing Google Cloud transcriber: {e}")
             elif method.startswith("whisper"):
                 if model_name:
                     model_path = os.path.join(get_model_directory(), model_name)
@@ -1257,24 +1246,9 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
             self.transcription_method = event.value
             if self.transcription_method == "vosk":
                 self.transcriber = AudioTranscriber()
-            elif self.transcription_method == "google_cloud":
-                self.transcriber = AudioTranscriberGoogleCloud()
             self.settings["transcription_selector"] = event.value
             self.unsaved_changes = True
             self.log(f"Changed transcription method to: {self.transcription_method}")        
-
-    # def on_select_changed(self, event: Select.Changed) -> None:
-    #     if event.select.id == "device_selector":
-    #         selected_device_index = event.value
-    #         self.selected_device = self.devices[selected_device_index]
-    #         logging.info(f"Selected device: {self.selected_device}")
-    #         #self.query_one("#device").update(f"Selected Device: {self.selected_device}")
-    #         self.transcribe_thread = Thread(target=self.start_transcribing, args=(selected_device_index,), daemon=True)
-    #         self.transcribe_thread.start()
-    #     elif event.select.id == "prompt_selector":
-    #         # Existing code for prompt selection
-    #         self.ollama_api.set_prompt(event.value)
-    #         self.log(f"Changed prompt to: {event.value}")
 
     def on_button_pressed(self, event: Button.Pressed):
         if event.button.id == "pause_button":
@@ -1494,7 +1468,8 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
         logging.info("Performing cleanup operations...")
         self.stop_event = True
         if hasattr(self, 'transcriber'):
-            self.transcriber.stop_transcribing()
+            if self.transcriber is not None:
+                self.transcriber.stop_transcribing()
         if hasattr(self, 'update_thread'):
             self.update_thread.join(timeout=2)
         if hasattr(self, 'log_thread'):
