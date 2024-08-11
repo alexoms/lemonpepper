@@ -106,7 +106,7 @@ lemonpepper
 Example showing audio from bluetooth headset mic combined with audio from chrome browser (playing youtube video) merged into blackhole 2 channel that outputs at 16Khz.  Note that the whisper transcriber uses 16Khz.
 ![Mac - having midi studio, blackhole, and loopback](docs/images/midi-studio-blackhole-loopback.png)
 
-Note that when TTS is used, it is going to the default audio device.  In the case, it was the bluetooth headset.
+Note that when TTS is used, it is going to the default audio device.  In this case, it was the bluetooth headset.
 
 ## Key Components
 
