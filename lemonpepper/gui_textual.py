@@ -49,7 +49,6 @@ from textual.message import Message
 from rich.markdown import Markdown as RichMarkdown
 from .ollama_api import OllamaAPI
 from .transcribe_audio import AudioTranscriber
-from .transcribe_audio_google_cloud import AudioTranscriberGoogleCloud
 from .transcribe_audio_whisper import WhisperStreamTranscriber
 from .PicovoiceOrcaStreamer import PicovoiceOrcaStreamer
 from rich.console import Console
@@ -270,8 +269,7 @@ class LemonPepper(App):
     WHISPER_MODEL_PATH = "base.en"
     TRANSCRIPTION_OPTIONS = [
         ("OpenAI Whisper", "whisper", WHISPER_MODEL_PATH),
-        ("Alpha Cephei Vosk", "vosk", None),
-        ("Google Cloud", "google_cloud", None)
+        ("Alpha Cephei Vosk", "vosk", None)
     ]
     CSS_PATH = "gui_textual.tcss"
     BINDINGS = [
@@ -445,6 +443,21 @@ class LemonPepper(App):
         padding-left: 1;
         padding-right: 1;
     }
+    #ollama_host {
+        width: auto;
+    }
+    #ollama_model{
+        width: 30;
+    }
+    #device_selector{
+        width: 50;
+    }
+    #picovoice_access_key{
+        width: 60;
+    }
+    #spacer-whisper-model{
+        width: 2;
+    }
     """
     # add new window
     
@@ -479,8 +492,7 @@ class LemonPepper(App):
         self.TRANSCRIPTION_OPTIONS = [
             ("OpenAI Whisper base.en", "whisper_base_en", os.path.join(self.model_dir, "ggml-base.en.bin")),
             ("OpenAI Whisper small.en", "whisper_small_en", os.path.join(self.model_dir, "ggml-small.en.bin")),
-            ("Alpha Cephei Vosk", "vosk", None),
-            ("Google Cloud", "google_cloud", None)
+            ("Alpha Cephei Vosk", "vosk", None)
         ]
         self.devices = self.list_audio_devices()
         self.selected_device = Select.BLANK
@@ -514,11 +526,13 @@ class LemonPepper(App):
                 yield ListView(id="session_list")
 
                 with Horizontal():
-                    yield Button(label="Pause Processing", id="pause_button", classes="not-paused", disabled=False)
-                    yield Button(label="Pause Capture", id="pause_capture_button", classes="capture-running", disabled=False)
+                    with Vertical():
+                        yield Button(label="Pause Processing", id="pause_button", classes="not-paused", disabled=False)
+                        yield Button(label="Pause Capture", id="pause_capture_button", classes="capture-running", disabled=False)
                     yield Button(label="Clear", id="clear_button", disabled=False)
-                    yield Button(label="Add Detailed Solution Prompt", id="add_solution_prompt", disabled=False)
-                    yield Button(label="Resubmit Transcription", id="resubmit_transcription", disabled=False)
+                    with Vertical():
+                        yield Button(label="Add Detailed Solution Prompt", id="add_solution_prompt", disabled=False)
+                        yield Button(label="Resubmit Transcription", id="resubmit_transcription", disabled=False)
                 
                 with Horizontal():
                     yield TextArea(id="user_input")
@@ -534,56 +548,48 @@ class LemonPepper(App):
                         yield RadioButton("C++", id="cpp")
                     yield Button(label="Reprocess using specified coding language", id="reprocess_with_language")
                 
-                with Vertical():
+                #with Vertical():
                     #yield AudioLevelMonitor()
-                    yield Slider(value=50, min=0, max=100, step=1, id="gain_slider")
-                    
-  
+                    #yield Slider(value=50, min=0, max=100, step=1, id="gain_slider")
+            with TabPane("Prompts", id="prompts"):       
+                with VerticalScroll(id="prompt-settings"):
+                    yield Static("AI Prompt to use: ")
+                    with RadioSet(id="prompt_selector"):
+                        for label, value in self.PROMPT_OPTIONS:
+                            yield RadioButton(label, id=f"prompt_{value}")  
             with TabPane("Settings", id="settings"):
                 with VerticalScroll(id="audio-device-settings"):
                     yield Static("Ollama API Settings:")
-                    yield Input(placeholder="Ollama API Host", id="ollama_host", value=self.settings.get("ollama_host", "http://localhost:11434"))
-                    yield Button("Refresh Models", id="refresh_models", variant="primary")
-                    # Update the Ollama model Select widget initialization
-                    ollama_model = self.settings.get("ollama_model", "")
-                    yield Select(
-                        options=[],  # We'll populate this later in on_mount
-                        id="ollama_model",
-                        allow_blank=True,
-                        prompt="Select Ollama Model",
-                    )
-                    yield Button("Update Ollama Settings", id="update_ollama_settings")
-                    #yield Input(placeholder="Ollama API Host", id="ollama_host", value=self.settings.get("ollama_host", "http://localhost:11434"))
-                    #yield Select(options=[], id="ollama_model", value=Select.BLANK, prompt="Select Ollama Model")
-                    #yield Select(id="device_selector", prompt="Select an audio input device", options=self.PROMPT_DEVICE_OPTIONS, value=Select.BLANK)
-        
-                    yield Static("Audio input device to transcribe: ")
-                    yield Select(id="device_selector", prompt="Select an audio input device", options=self.PROMPT_DEVICE_OPTIONS, allow_blank=True)
-                    yield Static("Audio transcriber to use: ")
-                    yield RadioSet(*(RadioButton(label, id=f"transcription_{value}") for label, value, _ in self.TRANSCRIPTION_OPTIONS), id="transcription_selector")
-                        # yield Select(
-                        #     options=self.TRANSCRIPTION_OPTIONS,
-                        #     id="transcription_selector",
-                        #     allow_blank=False
-                        # )
-                    with VerticalScroll(id="prompt-settings"):
-                        yield Static("AI Prompt to use: ")
-                        with RadioSet(id="prompt_selector"):
-                            for label, value in self.PROMPT_OPTIONS:
-                                yield RadioButton(label, id=f"prompt_{value}")
-                    yield Static("Picovoice Orca Settings:")
-                    yield Input(placeholder="Picovoice Access Key", id="picovoice_access_key", password=True)
-
-                        # yield Select(
-                        #     options=self.PROMPT_OPTIONS,
-                        #     id="prompt_selector",
-                        #     allow_blank=False
-                        # )
-                    with VerticalScroll(id="model-management"):
-                        yield Static("Whisper Model Management:")
+                    with Horizontal():
+                        yield Input(placeholder="Ollama API Host", id="ollama_host", value=self.settings.get("ollama_host", "http://localhost:11434"))
+                        yield Button("Refresh Models", id="refresh_models", variant="primary")
+                        # Update the Ollama model Select widget initialization
+                        ollama_model = self.settings.get("ollama_model", "")
+                        yield Select(
+                            options=[],  # We'll populate this later in on_mount
+                            id="ollama_model",
+                            allow_blank=True,
+                            prompt="Select Ollama Model",
+                        )
+                        yield Button("Update Ollama Settings", id="update_ollama_settings")
+                    with Horizontal():
+                        with Vertical():
+                            yield Static("Audio input device to transcribe: ")
+                            yield Select(id="device_selector", prompt="Select an audio input device", options=self.PROMPT_DEVICE_OPTIONS, allow_blank=True)
+                        with Vertical():
+                            yield Static("Audio transcriber to use: ")
+                            yield RadioSet(*(RadioButton(label, id=f"transcription_{value}") for label, value, _ in self.TRANSCRIPTION_OPTIONS), id="transcription_selector")
+                        with Vertical():
+                            yield Static("Picovoice Orca Settings:")
+                            yield Input(placeholder="Picovoice Access Key", id="picovoice_access_key", password=True)
+                    #with VerticalScroll(id="model-management"):
+                    
+                    yield Static("Whisper Model Retrieval:")
+                    with Horizontal():
                         yield ModelDownloadButton("ggml-base.en", "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin", "Download Base English Model")
+                        yield Static("", id="spacer-whisper-model")
                         yield ModelDownloadButton("ggml-small.en", "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin", "Download Small English Model")
-                        # Add more model download buttons as needed
+                    
                     yield Button("Save Settings", id="save_settings", variant="primary")
             with TabPane("Log", id="log-tab-pane"):
                 with VerticalScroll(id="log-vertical-scroll"):
@@ -900,14 +906,6 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
                     logging.error(f"Error initializing Vosk transcriber: {e}")
                 finally:
                     sys.stdout = old_stdout
-            elif method == "google_cloud":
-                logging.info("Initializing Google Cloud transcriber")
-                try:
-                    self.transcriber = AudioTranscriberGoogleCloud()
-                    self.transcriber.transcription_method = method
-                    logging.info("Google Cloud transcriber initialized successfully")
-                except Exception as e:
-                    logging.error(f"Error initializing Google Cloud transcriber: {e}")
             elif method.startswith("whisper"):
                 if model_name:
                     model_path = os.path.join(get_model_directory(), model_name)
@@ -1248,24 +1246,9 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
             self.transcription_method = event.value
             if self.transcription_method == "vosk":
                 self.transcriber = AudioTranscriber()
-            elif self.transcription_method == "google_cloud":
-                self.transcriber = AudioTranscriberGoogleCloud()
             self.settings["transcription_selector"] = event.value
             self.unsaved_changes = True
             self.log(f"Changed transcription method to: {self.transcription_method}")        
-
-    # def on_select_changed(self, event: Select.Changed) -> None:
-    #     if event.select.id == "device_selector":
-    #         selected_device_index = event.value
-    #         self.selected_device = self.devices[selected_device_index]
-    #         logging.info(f"Selected device: {self.selected_device}")
-    #         #self.query_one("#device").update(f"Selected Device: {self.selected_device}")
-    #         self.transcribe_thread = Thread(target=self.start_transcribing, args=(selected_device_index,), daemon=True)
-    #         self.transcribe_thread.start()
-    #     elif event.select.id == "prompt_selector":
-    #         # Existing code for prompt selection
-    #         self.ollama_api.set_prompt(event.value)
-    #         self.log(f"Changed prompt to: {event.value}")
 
     def on_button_pressed(self, event: Button.Pressed):
         if event.button.id == "pause_button":
@@ -1485,7 +1468,8 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
         logging.info("Performing cleanup operations...")
         self.stop_event = True
         if hasattr(self, 'transcriber'):
-            self.transcriber.stop_transcribing()
+            if self.transcriber is not None:
+                self.transcriber.stop_transcribing()
         if hasattr(self, 'update_thread'):
             self.update_thread.join(timeout=2)
         if hasattr(self, 'log_thread'):

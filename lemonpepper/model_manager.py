@@ -79,7 +79,7 @@ class ModelDownloadButton(Vertical):
         self.post_message(self.DownloadComplete(self.model_name, model_path))
 
     def on_mount(self):
-        self.styles.width = "100%"
-        self.button.styles.width = "100%"
-        self.progress_bar.styles.width = "100%"
+        self.styles.width = "auto"
+        self.button.styles.width = "auto"
+        self.progress_bar.styles.width = "auto"
         self.progress_bar.visible = False

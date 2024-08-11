@@ -3,7 +3,6 @@ vosk
 pvorca
 numpy
 sounddevice
-google-cloud-speech
 webrtcvad
 textual
 textual-slider
