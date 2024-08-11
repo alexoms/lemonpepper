@@ -274,8 +274,11 @@ class LemonPepper(App):
         ("Google Cloud", "google_cloud", None)
     ]
     CSS_PATH = "gui_textual.tcss"
-    BINDINGS = [Binding("ctrl+q", "quit", "Quit"),
-                Binding("ctrl+c", "copy_ai_response", "Copy AI Response")
+    BINDINGS = [
+                Binding("ctrl+c", "copy_ai_response", "Copy AI Response"),
+                Binding("ctrl+x", "play_llm_output", "Play LLM Output"),
+                Binding("ctrl+z", "stop_audio_playback", "Stop LLM Playback"),
+                Binding("ctrl+q", "quit", "Quit")
                 ]
     CSS = """
     Screen {
@@ -492,7 +495,7 @@ class LemonPepper(App):
         yield Header()
         footer = CustomFooter()
         yield footer
-        footer.set_highlights(["ctrl+q", "ctrl+c"])  # Set the keys you want to highlight
+        footer.set_highlights(["ctrl+c", "ctrl+z", "ctrl+x", "ctrl+q"])  # Set the keys you want to highlight
         with TabbedContent(initial="home"):
             with TabPane("Home", id="home"):
                 #with Container(id="app-grid"):
@@ -1323,11 +1326,17 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
                 self.notify("No LLM output to play", severity="warning")
         else:
             self.notify("Orca streamer not initialized. Please check your Picovoice access key in settings.", severity="error")
+    
+    def action_play_llm_output(self):
+        self.play_llm_output()
 
     def stop_audio_playback(self):
         if self.orca_streamer:
             self.orca_streamer.stop_playback()
             self.notify("Audio playback stopped", timeout=2)
+
+    def action_stop_audio_playback(self):
+        self.stop_audio_playback()
 
     def refresh_models(self) -> None:
         logging.info(f"Refreshing models from host: {self.ollama_host}")
