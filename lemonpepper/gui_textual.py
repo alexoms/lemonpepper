@@ -502,6 +502,7 @@ class LemonPepper(App):
                     yield Markdown()
                     yield Button("Copy to Clipboard", id="copy_ai_response", tooltip="Copy AI response to clipboard")
                     yield Button("Play LLM Output", id="play_llm_output", tooltip="Play LLM output as audio")
+                    yield Button("Stop Audio", id="stop_audio", tooltip="Stop audio playback")
                 #yield Static(id="transcription")
                 yield TextArea(id="transcription", language="markdown")
                 yield TextArea(id="partial", language="markdown")
@@ -1309,6 +1310,8 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
             self.notify("Settings saved successfully")
         elif event.button.id == "play_llm_output":
             self.play_llm_output()
+        elif event.button.id == "stop_audio":
+            self.stop_audio_playback()
 
     def play_llm_output(self):
         if self.orca_streamer:
@@ -1320,6 +1323,11 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
                 self.notify("No LLM output to play", severity="warning")
         else:
             self.notify("Orca streamer not initialized. Please check your Picovoice access key in settings.", severity="error")
+
+    def stop_audio_playback(self):
+        if self.orca_streamer:
+            self.orca_streamer.stop_playback()
+            self.notify("Audio playback stopped", timeout=2)
 
     def refresh_models(self) -> None:
         logging.info(f"Refreshing models from host: {self.ollama_host}")
