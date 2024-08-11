@@ -51,6 +51,7 @@ from .ollama_api import OllamaAPI
 from .transcribe_audio import AudioTranscriber
 from .transcribe_audio_google_cloud import AudioTranscriberGoogleCloud
 from .transcribe_audio_whisper import WhisperStreamTranscriber
+from .PicovoiceOrcaStreamer import PicovoiceOrcaStreamer
 from rich.console import Console
 from rich.text import Text
 from pyperclip import copy as copy_to_clipboard
@@ -65,6 +66,7 @@ from .model_manager import ModelDownloadButton
 from textual import work
 import httpx
 import appdirs
+
 
 class LogRedirector(io.StringIO):
     def write(self, string):
@@ -463,6 +465,8 @@ class LemonPepper(App):
         (f"{i}: {device['name']} (in: {device['max_input_channels']}, out: {device['max_output_channels']})", i)
         for i, device in enumerate(devices)
     ]
+    orca_streamer = None
+
 
     def __init__(self):
         logging.info("Initializing LemonPepper")
@@ -497,6 +501,7 @@ class LemonPepper(App):
                     yield Static(id="ollama")
                     yield Markdown()
                     yield Button("Copy to Clipboard", id="copy_ai_response", tooltip="Copy AI response to clipboard")
+                    yield Button("Play LLM Output", id="play_llm_output", tooltip="Play LLM output as audio")
                 #yield Static(id="transcription")
                 yield TextArea(id="transcription", language="markdown")
                 yield TextArea(id="partial", language="markdown")
@@ -562,6 +567,9 @@ class LemonPepper(App):
                         with RadioSet(id="prompt_selector"):
                             for label, value in self.PROMPT_OPTIONS:
                                 yield RadioButton(label, id=f"prompt_{value}")
+                    yield Static("Picovoice Orca Settings:")
+                    yield Input(placeholder="Picovoice Access Key", id="picovoice_access_key", password=True)
+
                         # yield Select(
                         #     options=self.PROMPT_OPTIONS,
                         #     id="prompt_selector",
@@ -678,6 +686,10 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
         self.update_ollama_models()
         self.apply_saved_settings()
         self.update_device_selector()
+        # Initialize PicovoiceOrcaStreamer with access key from settings
+        access_key = self.settings.get("picovoice_access_key", "")
+        if access_key:
+            self.initialize_orca_streamer(access_key)
         # Apply saved settings after populating options
         #self.apply_saved_settings()
         # Set up signal handling
@@ -700,6 +712,13 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
         #     self.transcribe_thread.start()
         # else:
         #     self.log("BlackHole 2ch not found. Please select an audio device manually.")
+
+    def initialize_orca_streamer(self, access_key):
+        try:
+            self.orca_streamer = PicovoiceOrcaStreamer(access_key=access_key)
+            self.notify("Orca streamer initialized successfully", severity="information")
+        except Exception as e:
+            self.notify(f"Failed to initialize Orca streamer: {str(e)}", severity="error")
 
     def apply_saved_settings(self):
         # Apply Ollama host setting
@@ -730,6 +749,10 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
         if prompt_radio:
             prompt_radio.value = True
 
+        # Apply Picovoice access key
+        picovoice_access_key_input = self.query_one("#picovoice_access_key", Input)
+        picovoice_access_key_input.value = self.settings.get("picovoice_access_key", "")
+
         # Log the loaded settings
         logging.info(f"Loaded settings: {self.settings}")
         logging.info(f"Current transcription method: {self.transcription_method}")
@@ -742,6 +765,9 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
                 self.settings["ollama_host"] = event.value
                 self.unsaved_changes = True
                 self.post_message(self.OllamaHostChanged(event.value))
+        if event.input.id == "picovoice_access_key":
+            self.settings["picovoice_access_key"] = event.value
+            self.unsaved_changes = True
     
     #def on_lemon_pepper_ollama_host_changed(self, event: OllamaHostChanged) -> None:
     #    logging.info(f"Updating Ollama host to: {event.host}")
@@ -946,6 +972,9 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
         if not self.unsaved_changes:
             logging.info("No changes to save")
             return
+        
+        # Make sure to include the Picovoice access key in the settings to be saved
+        self.settings["picovoice_access_key"] = self.query_one("#picovoice_access_key", Input).value
 
         settings_dir = appdirs.user_config_dir("lemonpepper", "UnidatumIntegratedProductsLLC")
         os.makedirs(settings_dir, exist_ok=True)
@@ -1273,7 +1302,24 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
         elif event.button.id == "save_settings":
             self.save_settings()
             self.unsaved_changes = False
+            # Re-initialize Orca streamer with potentially new access key
+            access_key = self.settings.get("picovoice_access_key", "")
+            if access_key:
+                self.initialize_orca_streamer(access_key)
             self.notify("Settings saved successfully")
+        elif event.button.id == "play_llm_output":
+            self.play_llm_output()
+
+    def play_llm_output(self):
+        if self.orca_streamer:
+            llm_output = self.ollama_conversation
+            if llm_output:
+                self.orca_streamer.synthesize_and_play(llm_output)
+                self.notify("Playing LLM output", timeout=3)
+            else:
+                self.notify("No LLM output to play", severity="warning")
+        else:
+            self.notify("Orca streamer not initialized. Please check your Picovoice access key in settings.", severity="error")
 
     def refresh_models(self) -> None:
         logging.info(f"Refreshing models from host: {self.ollama_host}")
@@ -1427,6 +1473,8 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
             self.update_thread.join(timeout=2)
         if hasattr(self, 'log_thread'):
             self.log_thread.join(timeout=2)
+        if self.orca_streamer:
+            self.orca_streamer.stop_and_clear()
         logging.info("Cleanup complete.")
 
     def exit(self, *args, **kwargs):
