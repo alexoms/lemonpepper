@@ -1,5 +1,6 @@
 pywhispercpp
 vosk
+pvorca
 numpy
 sounddevice
 google-cloud-speech

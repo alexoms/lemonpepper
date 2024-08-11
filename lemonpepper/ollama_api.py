@@ -32,7 +32,8 @@ class OllamaAPI:
         self.model = model
         self.client = ollama.Client(host=host)
         
-    # fix mistranscriptions using the context of the transcript and based on potential phonetic issues. I asked it to replace transcribed words that don't make sense with "[unintelligable]"        
+    # TODO: Add prompt to specify to fix mistranscriptions using the context of the transcript and based on potential phonetic issues. 
+    # Ask it to replace transcribed words that don't make sense with "[unintelligable]"
 
     def default_prompt(self, transcription):
         return (

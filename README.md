@@ -77,6 +77,11 @@ lemonpepper
 4. Use the various buttons to control the application, including pausing/resuming transcription, clearing data, and copying responses.
 5. Check the Log tab if there is something wrong and need to debug
 
+### Optional - Settings tab - Enter Picovoice Orca to enable text to speech for reading LLM output out loud
+1.  Go to https://picovoice.ai/platform/orca/
+2.  Create a free account and generate an AccessKey.  It has a limit of 10M characters but that should be enough.  This will require an internet connection for local usage as they verify the access key that way.  This functionality is experimental for now.  If it becomes a blocker, we will choose another TTS engine that does not have these constraints.
+3.  Paste the AccessKey into the input field in the settings tab and click Save Settings
+
 ## Key Components
 
 - `gui_textual.py`: Main application GUI and control logic
@@ -119,5 +124,6 @@ limitations under the License.
 - [pywhispercpp](https://github.com/abdeladim-s/pywhispercpp) for python bindings to whisper.cpp
 - [Whisper.cpp](https://github.com/ggerganov/whisper.cpp) for c++ port of OpenAI's Whisper model
 - OpenAI for their Whisper model
-- Meta's Llama 3.1 8B robust LLM model 
+- Meta's Llama 3.1 8B robust LLM model
+- Picovoice Orca TTS Beta 
 ---
