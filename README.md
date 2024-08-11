@@ -34,12 +34,13 @@ This application provides real-time audio transcription and analysis using Large
 > - To create an environment, use: **_conda create -n py310-audio-ai python=3.10 -y_**
 > - To activate the environment, use: **_conda activate py310-audio-ai_**
 
-1. Install required dependencies:
+1. Install by typing:
    ```
    pip install lemonpepper
    ```
 
-2. Download and setup Ollama (https://ollama.com/) with your desired LLM (https://ollama.com/library) and ensure it's running on the specified host (default: http://localhost:11434)
+2. Install required dependencies:
+   Download and setup Ollama (https://ollama.com/) with your desired LLM (https://ollama.com/library) and ensure it's running on the specified host (default: http://localhost:11434)
 
 
 ## Usage
@@ -74,7 +75,7 @@ lemonpepper
 2. Start speaking or playing audio from a browser, and the application will transcribe your audio in real-time.
 3. The LLM will process the transcription and provide responses.
 4. Use the various buttons to control the application, including pausing/resuming transcription, clearing data, and copying responses.
-5. Check the Log tab if you there is something wrong and need to debug
+5. Check the Log tab if there is something wrong and need to debug
 
 ## Key Components
 
