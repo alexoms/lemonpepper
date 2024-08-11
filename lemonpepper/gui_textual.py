@@ -445,6 +445,21 @@ class LemonPepper(App):
         padding-left: 1;
         padding-right: 1;
     }
+    #ollama_host {
+        width: auto;
+    }
+    #ollama_model{
+        width: 30;
+    }
+    #device_selector{
+        width: 50;
+    }
+    #picovoice_access_key{
+        width: 60;
+    }
+    #spacer-whisper-model{
+        width: 2;
+    }
     """
     # add new window
     
@@ -514,11 +529,13 @@ class LemonPepper(App):
                 yield ListView(id="session_list")
 
                 with Horizontal():
-                    yield Button(label="Pause Processing", id="pause_button", classes="not-paused", disabled=False)
-                    yield Button(label="Pause Capture", id="pause_capture_button", classes="capture-running", disabled=False)
+                    with Vertical():
+                        yield Button(label="Pause Processing", id="pause_button", classes="not-paused", disabled=False)
+                        yield Button(label="Pause Capture", id="pause_capture_button", classes="capture-running", disabled=False)
                     yield Button(label="Clear", id="clear_button", disabled=False)
-                    yield Button(label="Add Detailed Solution Prompt", id="add_solution_prompt", disabled=False)
-                    yield Button(label="Resubmit Transcription", id="resubmit_transcription", disabled=False)
+                    with Vertical():
+                        yield Button(label="Add Detailed Solution Prompt", id="add_solution_prompt", disabled=False)
+                        yield Button(label="Resubmit Transcription", id="resubmit_transcription", disabled=False)
                 
                 with Horizontal():
                     yield TextArea(id="user_input")
@@ -534,56 +551,48 @@ class LemonPepper(App):
                         yield RadioButton("C++", id="cpp")
                     yield Button(label="Reprocess using specified coding language", id="reprocess_with_language")
                 
-                with Vertical():
+                #with Vertical():
                     #yield AudioLevelMonitor()
-                    yield Slider(value=50, min=0, max=100, step=1, id="gain_slider")
-                    
-  
+                    #yield Slider(value=50, min=0, max=100, step=1, id="gain_slider")
+            with TabPane("Prompts", id="prompts"):       
+                with VerticalScroll(id="prompt-settings"):
+                    yield Static("AI Prompt to use: ")
+                    with RadioSet(id="prompt_selector"):
+                        for label, value in self.PROMPT_OPTIONS:
+                            yield RadioButton(label, id=f"prompt_{value}")  
             with TabPane("Settings", id="settings"):
                 with VerticalScroll(id="audio-device-settings"):
                     yield Static("Ollama API Settings:")
-                    yield Input(placeholder="Ollama API Host", id="ollama_host", value=self.settings.get("ollama_host", "http://localhost:11434"))
-                    yield Button("Refresh Models", id="refresh_models", variant="primary")
-                    # Update the Ollama model Select widget initialization
-                    ollama_model = self.settings.get("ollama_model", "")
-                    yield Select(
-                        options=[],  # We'll populate this later in on_mount
-                        id="ollama_model",
-                        allow_blank=True,
-                        prompt="Select Ollama Model",
-                    )
-                    yield Button("Update Ollama Settings", id="update_ollama_settings")
-                    #yield Input(placeholder="Ollama API Host", id="ollama_host", value=self.settings.get("ollama_host", "http://localhost:11434"))
-                    #yield Select(options=[], id="ollama_model", value=Select.BLANK, prompt="Select Ollama Model")
-                    #yield Select(id="device_selector", prompt="Select an audio input device", options=self.PROMPT_DEVICE_OPTIONS, value=Select.BLANK)
-        
-                    yield Static("Audio input device to transcribe: ")
-                    yield Select(id="device_selector", prompt="Select an audio input device", options=self.PROMPT_DEVICE_OPTIONS, allow_blank=True)
-                    yield Static("Audio transcriber to use: ")
-                    yield RadioSet(*(RadioButton(label, id=f"transcription_{value}") for label, value, _ in self.TRANSCRIPTION_OPTIONS), id="transcription_selector")
-                        # yield Select(
-                        #     options=self.TRANSCRIPTION_OPTIONS,
-                        #     id="transcription_selector",
-                        #     allow_blank=False
-                        # )
-                    with VerticalScroll(id="prompt-settings"):
-                        yield Static("AI Prompt to use: ")
-                        with RadioSet(id="prompt_selector"):
-                            for label, value in self.PROMPT_OPTIONS:
-                                yield RadioButton(label, id=f"prompt_{value}")
-                    yield Static("Picovoice Orca Settings:")
-                    yield Input(placeholder="Picovoice Access Key", id="picovoice_access_key", password=True)
-
-                        # yield Select(
-                        #     options=self.PROMPT_OPTIONS,
-                        #     id="prompt_selector",
-                        #     allow_blank=False
-                        # )
-                    with VerticalScroll(id="model-management"):
-                        yield Static("Whisper Model Management:")
+                    with Horizontal():
+                        yield Input(placeholder="Ollama API Host", id="ollama_host", value=self.settings.get("ollama_host", "http://localhost:11434"))
+                        yield Button("Refresh Models", id="refresh_models", variant="primary")
+                        # Update the Ollama model Select widget initialization
+                        ollama_model = self.settings.get("ollama_model", "")
+                        yield Select(
+                            options=[],  # We'll populate this later in on_mount
+                            id="ollama_model",
+                            allow_blank=True,
+                            prompt="Select Ollama Model",
+                        )
+                        yield Button("Update Ollama Settings", id="update_ollama_settings")
+                    with Horizontal():
+                        with Vertical():
+                            yield Static("Audio input device to transcribe: ")
+                            yield Select(id="device_selector", prompt="Select an audio input device", options=self.PROMPT_DEVICE_OPTIONS, allow_blank=True)
+                        with Vertical():
+                            yield Static("Audio transcriber to use: ")
+                            yield RadioSet(*(RadioButton(label, id=f"transcription_{value}") for label, value, _ in self.TRANSCRIPTION_OPTIONS), id="transcription_selector")
+                        with Vertical():
+                            yield Static("Picovoice Orca Settings:")
+                            yield Input(placeholder="Picovoice Access Key", id="picovoice_access_key", password=True)
+                    #with VerticalScroll(id="model-management"):
+                    
+                    yield Static("Whisper Model Retrieval:")
+                    with Horizontal():
                         yield ModelDownloadButton("ggml-base.en", "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin", "Download Base English Model")
+                        yield Static("", id="spacer-whisper-model")
                         yield ModelDownloadButton("ggml-small.en", "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin", "Download Small English Model")
-                        # Add more model download buttons as needed
+                    
                     yield Button("Save Settings", id="save_settings", variant="primary")
             with TabPane("Log", id="log-tab-pane"):
                 with VerticalScroll(id="log-vertical-scroll"):
