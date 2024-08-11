@@ -19,9 +19,7 @@ This application provides real-time audio transcription and analysis using Large
 
 - Python 3.7+
 - Ollama (for local LLM integration)
-- Whisper (for offline speech recognition).  
-- Optional...Vosk (for offline speech recognition).  Audio language models can be downloaded at https://alphacephei.com/vosk/models
-- Optional...Google Cloud SDK (for Google Cloud Speech-to-Text, optional)
+
 
 - Headset/microphone (supports bluetooth)
 - Software audio loopback for mixing microphone and other audio source such as from a browser or video conferencing tool 
@@ -36,22 +34,12 @@ This application provides real-time audio transcription and analysis using Large
 > - To create an environment, use: **_conda create -n py310-audio-ai python=3.10 -y_**
 > - To activate the environment, use: **_conda activate py310-audio-ai_**
 
-1. Clone the repository:
-   ```
-   git clone https://github.com/alexoms/lemonpepper.git
-   cd lemonpepper
-   ```
-
-2. Install required dependencies:
+1. Install required dependencies:
    ```
    pip install lemonpepper
-
-   or 
-
-   pip install .
    ```
 
-3. Download and setup Ollama (https://ollama.com/) with your desired LLM (https://ollama.com/library) and ensure it's running on the specified host (default: http://localhost:11434)
+2. Download and setup Ollama (https://ollama.com/) with your desired LLM (https://ollama.com/library) and ensure it's running on the specified host (default: http://localhost:11434)
 
 
 ## Usage
@@ -62,6 +50,7 @@ Run the application:
 lemonpepper
 ```
 
+### Settings tab - Set Ollama server location and LLM model
 1. Click on the settings tab
 2. Point to the ollama server that you have installed already.  The value of the Ollama API Settings form field is preset to http://localhost:11434.  You can change it to another host by editing the form field and changing the localhost to the ip address if you have install ollama to a different machine.
 3. If you change the host name, click on the Refresh Models button under the hostname to pull the list of llm models that this ollama server has available.
@@ -69,15 +58,23 @@ lemonpepper
 5. If you do not see any models, then log into your ollama server and make sure to pull a model from their library (https://ollama.com/library).  llama3.1 seems to work well.
 6. Choose a model when you can see a selection from the selection menu.
 7. Click on Update Ollama Settings.
-8. Download a whisper model by clicking Download Base English Model button.  You should see a download progress bar.  Once completed, it will download the whisper transcription model locally.  It downloads from https://huggingface.co/ggerganov/whisper.cpp/tree/main
-9. Choose the transcription method.  We prefer OpenAI Whisper base.en.
-10. Select an audio input device from the available options.  We prefer BlackHole 2ch after installing BlackHole and mac Loopback and mixing audio from the browser+microphone into the BlackHole 2ch.
-11. Select a prompt template based on your use case.
-12. Click on the Home tab
-13. Start speaking or playing audio from a browser, and the application will transcribe your audio in real-time.
-14. The LLM will process the transcription and provide responses.
-15. Use the various buttons to control the application, including pausing/resuming transcription, clearing data, and copying responses.
-16. Check the Log tab if you there is something wrong and need to debug
+
+### Settings tab - Download and Select Whisper model for transcription
+1. Download a whisper model by clicking Download Base English Model button.  You should see a download progress bar.  Once completed, it will download the whisper transcription model locally.  It downloads from https://huggingface.co/ggerganov/whisper.cpp/tree/main
+2. Choose the transcription method.  We prefer OpenAI Whisper base.en.
+
+### Settings tab - Select audio device for transcription
+1. Select an audio input device from the available options.  We prefer BlackHole 2ch after installing BlackHole and mac Loopback and mixing audio from the browser+microphone into the BlackHole 2ch.
+
+### Settings tab - Choose prompt template
+1. Select a prompt template based on your use case.
+
+### Home tab
+1. Click on the Home tab
+2. Start speaking or playing audio from a browser, and the application will transcribe your audio in real-time.
+3. The LLM will process the transcription and provide responses.
+4. Use the various buttons to control the application, including pausing/resuming transcription, clearing data, and copying responses.
+5. Check the Log tab if you there is something wrong and need to debug
 
 ## Key Components
 
