@@ -1,4 +1,5 @@
 # Co-Pilot AI Agent using Offline Real-Time Audio Transcription and Offline LLM-Powered Analysis
+## includes experimental text-to-speech LLM Response audio feedback
 
 ## Overview
 
@@ -14,6 +15,8 @@ This application provides real-time audio transcription and analysis using Large
 - User-friendly GUI built with Textual
 - Adjustable audio settings including device selection and gain control
 - Copy-to-clipboard functionality for easy sharing of transcriptions and LLM responses
+- Experimental Text to Speech (TTS) for reading the LLM responses out loud
+- Hot keys to quickly copy-to clipboard and start/stop the TTS
 
 ## Prerequisites
 
