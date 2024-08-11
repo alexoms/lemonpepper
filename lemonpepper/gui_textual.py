@@ -1,3 +1,4 @@
+import pdb
 import io
 import os
 import sys
@@ -16,11 +17,11 @@ class RotatingLogHandler(logging.Handler):
             #log_buffer.append(self.format(record))
 
 # Configure logging to use the custom handler
-handler = RotatingLogHandler()
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-handler.setFormatter(formatter)
-logging.basicConfig(level=logging.DEBUG, handlers=[handler])
-
+# handler = RotatingLogHandler()
+# formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+# handler.setFormatter(formatter)
+# logging.basicConfig(level=logging.DEBUG, handlers=[handler])
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s', stream=sys.stderr)
 
 import traceback
 
@@ -52,6 +53,7 @@ from .transcribe_audio import AudioTranscriber
 from .transcribe_audio_google_cloud import AudioTranscriberGoogleCloud
 from .transcribe_audio_whisper import WhisperStreamTranscriber
 from .PicovoiceOrcaStreamer import PicovoiceOrcaStreamer
+from rich.live import Live
 from rich.console import Console
 from rich.text import Text
 from pyperclip import copy as copy_to_clipboard
@@ -497,8 +499,8 @@ class LemonPepper(App):
             with TabPane("Home", id="home"):
                 #with Container(id="app-grid"):
                 with VerticalScroll(id="left-pane"):
-                    #yield RichLog(id="ollama")
-                    yield Static(id="ollama")
+                    yield RichLog(id="ollama", wrap=True, highlight=True, markup=True)
+                    #yield Static(id="ollama")
                     yield Markdown()
                     yield Button("Copy to Clipboard", id="copy_ai_response", tooltip="Copy AI response to clipboard")
                     yield Button("Play LLM Output", id="play_llm_output", tooltip="Play LLM output as audio")
@@ -654,7 +656,7 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
 
 
     def on_mount(self) -> None:
-        logging.info("LemonPepper mounted")
+        logging.info("LemonPepper on_mount started")
         self.update_transcription_options()
         
         # Set the first prompt option as default
@@ -672,6 +674,15 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
         self.update_thread.start()
         self.log_thread = Thread(target=self.update_log, daemon=True)
         self.log_thread.start()
+        
+        logging.info("Initializing ollama_widget")
+        self.ollama_widget = self.query_one("#ollama", RichLog)
+        self.highlighted_text = None
+        if self.ollama_widget:
+            logging.info("ollama_widget initialized successfully")
+        else:
+            logging.error("Failed to initialize ollama_widget")
+
         self.start_new_session()
         self.set_timer(0.1, self.update_device_selector)
         
@@ -683,6 +694,8 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
         self.query_one("#log-vertical-scroll", VerticalScroll).border_title = "Log"
         self.query_one("#audio-device-settings", VerticalScroll).border_title = "Audio Device"
         self.query_one("#prompt-settings", VerticalScroll).border_title = "LLM Prompt Engineering"
+        
+
         # Populate Ollama model options and set value
         self.update_ollama_models()
         self.apply_saved_settings()
@@ -691,11 +704,12 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
         access_key = self.settings.get("picovoice_access_key", "")
         if access_key:
             self.initialize_orca_streamer(access_key)
+        
         # Apply saved settings after populating options
         #self.apply_saved_settings()
         # Set up signal handling
         signal.signal(signal.SIGINT, self.handle_interrupt)
-        
+        logging.info("LemonPepper on_mount completed")
         #self.update_content_timer = self.set_interval(1/30, self.update_content)
         
         # Find and set BlackHole 2ch as default if it exists
@@ -1075,16 +1089,24 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
         self.update_ollama_display()
 
     def update_ollama_display(self):
+        logging.info("Updating ollama display")
+        if self.ollama_widget is None:
+            logging.error("ollama_widget is not initialized")
+            return
+
         try:
             markdown_content = self.ollama_conversation
-            #logging.info(markdown_content)
-            #self.query_one(Markdown).update(markdown_content)
+            logging.debug(f"Markdown content: {markdown_content[:100]}...")  # Log first 100 chars
             md = RichMarkdown(markdown_content)
-            self.query_one("#ollama", Static).update(md)
+            self.ollama_widget.clear()
+            self.ollama_widget.write(md)
+            logging.info("ollama display updated successfully")
         except Exception as e:
             logging.error(f"Error updating Markdown: {e}")
-            # Fallback to using a Static widget
-            self.query_one("#ollama", Static).update(markdown_content)
+            logging.error(traceback.format_exc())
+            # Fallback to using plain text
+            self.ollama_widget.clear()
+            self.ollama_widget.write(markdown_content)
     
     def on_update_ollama_display(self, message: UpdateOllamaDisplay):
         if message.conversation != self.ollama_conversation or message.status != self.processing_status:
@@ -1317,12 +1339,40 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
         if self.orca_streamer:
             llm_output = self.ollama_conversation
             if llm_output:
-                self.orca_streamer.synthesize_and_play(llm_output)
+                self.highlighted_text = Text(llm_output)
+                self.ollama_widget.clear()
+                self.ollama_widget.write(self.highlighted_text)
+                self.orca_streamer.synthesize_and_play(llm_output, self.highlight_word)
                 self.notify("Playing LLM output", timeout=3)
             else:
                 self.notify("No LLM output to play", severity="warning")
         else:
             self.notify("Orca streamer not initialized. Please check your Picovoice access key in settings.", severity="error")
+
+    def highlight_word(self, word):
+        def update_highlight():
+            if self.highlighted_text is None:
+                return
+
+            plain_text = self.highlighted_text.plain
+            try:
+                start = plain_text.index(word)
+                end = start + len(word)
+
+                # Remove previous highlighting
+                self.highlighted_text.stylize("", 0, len(plain_text))
+                
+                # Apply new highlighting
+                self.highlighted_text.stylize("bold magenta", start, end)
+
+                # Update only the changed portion
+                self.ollama_widget.update(self.highlighted_text)
+
+            except ValueError:
+                # Word not found in text, just skip highlighting
+                pass
+
+        self.call_from_thread(update_highlight)
 
     def stop_audio_playback(self):
         if self.orca_streamer:
@@ -1508,4 +1558,5 @@ def main():
 
 
 if __name__ == "__main__":
+    pdb.set_trace()  # This will start the debugger
     main()

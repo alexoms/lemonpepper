@@ -5,7 +5,7 @@ import numpy as np
 import pvorca
 import os
 import time
-from typing import Sequence, Optional
+from typing import Sequence, Optional, Callable
 from pvorca import OrcaError
 
 class StreamingAudioDevice:
@@ -114,25 +114,16 @@ class PicovoiceOrcaStreamer:
         self.device_index = None
         self.playback_thread = None
         self.stop_event = threading.Event()
+        self.word_callback = None
 
-    def initialize_orca(self):
-        try:
-            self.audio_device = StreamingAudioDevice(self.device_index)
-            self.orca = pvorca.create(access_key=self.access_key)
-            self.orca_stream = self.orca.stream_open()
-            self.sample_rate = self.orca.sample_rate
-            if self.audio_device:
-                self.audio_device.start(self.sample_rate)
-        except OrcaError as e:
-            raise Exception(f"Failed to initialize Orca: {e}")
-
-    def synthesize_and_play(self, text):
+    def synthesize_and_play(self, text, word_callback: Callable[[str], None]):
         if self.playback_thread and self.playback_thread.is_alive():
             self.stop_playback()
         
         self.stop_event.clear()
         if self.audio_device:
             self.audio_device.reset()
+        self.word_callback = word_callback
         self.playback_thread = threading.Thread(target=self._synthesize_and_play_thread, args=(text,))
         self.playback_thread.start()
 
@@ -141,14 +132,17 @@ class PicovoiceOrcaStreamer:
             self.initialize_orca()
 
         try:
-            chunks = text.split('.')
-            for chunk in chunks:
+            words = text.split()
+            for word in words:
                 if self.stop_event.is_set():
                     break
-                if chunk.strip():
-                    pcm = self.orca_stream.synthesize(chunk.strip() + '.')
+                if word.strip():
+                    pcm = self.orca_stream.synthesize(word + ' ')
                     if pcm is not None and not self.stop_event.is_set():
                         self.audio_device.play(pcm)
+                        if self.word_callback:
+                            self.word_callback(word)
+                    time.sleep(0.1)  # Small delay between words
 
             # Flush any remaining audio
             if not self.stop_event.is_set():
@@ -165,6 +159,7 @@ class PicovoiceOrcaStreamer:
             self.audio_device.stop()
         if self.playback_thread and self.playback_thread.is_alive():
             self.playback_thread.join()
+        self.stop_event.clear()
 
     def stop_and_clear(self):
         self.stop_playback()
