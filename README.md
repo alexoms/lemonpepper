@@ -1,5 +1,6 @@
 # Terminal based application: Co-Pilot AI Agent using Offline Real-Time Audio Transcription and Offline LLM-Powered Analysis
-## includes experimental text-to-speech LLM Response audio feedback
+### plus experimental text-to-speech LLM Response audio feedback
+### plus RAG via LangChain and Milvus Vector database
 
 ## Overview
 
@@ -17,6 +18,9 @@ This application provides real-time audio transcription and analysis using Large
 - Copy-to-clipboard functionality for easy sharing of transcriptions and LLM responses
 - Experimental Text to Speech (TTS) for reading the LLM responses out loud
 - Hot keys to quickly copy-to clipboard and start/stop the TTS
+- Upload pdf files to local Milvus Vector database store
+- Real-time LLM interaction against documents in the vector database store
+- Interactions have prompt history awareness
 
 [![Watch the demo video](docs/images/screenshot_home.png)](https://youtu.be/X29zS82GMVk?hd=1 "Demo")
 
@@ -25,6 +29,8 @@ This application provides real-time audio transcription and analysis using Large
 - Python 3.7+
 - Ollama (for local LLM integration)
 
+(optional)
+- Milvus (for local Vector database deployed via Docker)
 
 - Headset/microphone
 - Software audio loopback for mixing microphone and other audio source such as from a browser or video conferencing tool 
@@ -150,4 +156,7 @@ limitations under the License.
 - OpenAI for their Whisper model
 - Meta's Llama 3.1 8B robust LLM model
 - Picovoice Orca TTS Beta 
+- Milvus Vector Database for offline vector data storage
+- LangChain
+- Jina AI embedding models for local creation of text embeddings from PDFs
 ---
