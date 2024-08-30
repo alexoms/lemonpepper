@@ -22,11 +22,6 @@ from typing import List, Dict, Any
 import hashlib
 import uuid
 
-# Server addresses
-OLLAMA_SERVER = "http://192.168.1.81:11434"  # Replace with your Ollama server address
-MILVUS_HOST = "192.168.1.81"  # Replace with your Milvus server address
-MILVUS_PORT = "19530"  # Default Milvus port, change if needed
-
 def initialize_system(ollama_server: str, milvus_host: str, milvus_port: str):
     # Connect to Milvus
     connections.connect(host=milvus_host, port=milvus_port)

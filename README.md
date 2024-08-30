@@ -1,6 +1,6 @@
 # Terminal based application: Co-Pilot AI Agent using Offline Real-Time Audio Transcription and Offline LLM-Powered Analysis
 ### plus experimental text-to-speech LLM Response audio feedback
-### plus RAG via LangChain and Milvus Vector database
+### plus Offline RAG via LangChain and Milvus Vector database
 
 ## Overview
 
