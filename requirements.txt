@@ -9,3 +9,6 @@ textual-slider
 ollama
 pyperclip
 rich
+pymilvus
+langchain
+langchain_community

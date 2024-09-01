@@ -22,6 +22,21 @@ from typing import List, Dict, Any
 import hashlib
 import uuid
 
+class RAGSystem:
+    def __init__(self, ollama_server: str, milvus_host: str, milvus_port: str):
+        self.system = initialize_system(ollama_server, milvus_host, milvus_port)
+
+    def process_document(self, file_path: str) -> None:
+        process_document(file_path, self.system)
+
+    def query(self, query: str) -> Dict[str, Any]:
+        return query_system(query, self.system)
+
+    def cleanup(self) -> None:
+        cleanup_system(self.system)
+
+
+
 def initialize_system(ollama_server: str, milvus_host: str, milvus_port: str):
     # Connect to Milvus
     connections.connect(host=milvus_host, port=milvus_port)
@@ -267,24 +282,24 @@ def get_or_create_milvus_collection(collection_name, dim):
     collection.load()
     return collection
 
+# Modify the main function to use the new class
 def main():
-    # Example usage
     ollama_server = "http://192.168.1.81:11434"
     milvus_host = "192.168.1.81"
     milvus_port = "19530"
     
-    system = initialize_system(ollama_server, milvus_host, milvus_port)
+    rag_system = RAGSystem(ollama_server, milvus_host, milvus_port)
     
     file_path = "https://www.congress.gov/118/bills/hr8785/BILLS-118hr8785ih.pdf"
     print(f"Processing document: {file_path}")
-    process_document(file_path, system)
+    rag_system.process_document(file_path)
 
     while True:
         query = input("\nQuery (or type 'exit' to quit): ")
         if query.lower() == 'exit':
             break
 
-        result = query_system(query, system)
+        result = rag_system.query(query)
         print("\nAnswer:", result['answer'])
         if result['source'] == 'retrieval':
             print("\nSource Documents:")
@@ -294,8 +309,7 @@ def main():
                 print(f"Metadata: {doc.metadata}")
                 print()
 
-    cleanup_system(system)
-
+    rag_system.cleanup()
 
 if __name__ == "__main__":
     main()

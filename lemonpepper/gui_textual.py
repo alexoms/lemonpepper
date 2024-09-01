@@ -65,7 +65,8 @@ from .model_manager import ModelDownloadButton
 from textual import work
 import httpx
 import appdirs
-
+from .langchain_milvus_rag_chat_api import RAGSystem
+import tempfile
 
 class LogRedirector(io.StringIO):
     def write(self, string):
@@ -502,6 +503,8 @@ class LemonPepper(App):
         self.ollama_host = self.settings.get("ollama_host", "http://localhost:11434")
         self.saved_ollama_model = None
         self.saved_device = None
+        self.rag_system = None
+        self.current_system = "ollama"  # Default to Ollama
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -589,8 +592,20 @@ class LemonPepper(App):
                         yield ModelDownloadButton("ggml-base.en", "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin", "Download Base English Model")
                         yield Static("", id="spacer-whisper-model")
                         yield ModelDownloadButton("ggml-small.en", "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin", "Download Small English Model")
-                    
                     yield Button("Save Settings", id="save_settings", variant="primary")
+
+            with TabPane("RAG Settings", id="rag-settings"):
+                yield Input(placeholder="Milvus Host", id="rag_milvus_host")
+                yield Input(placeholder="Milvus Port", id="rag_milvus_port")
+                yield Button("Initialize RAG System", id="initialize_rag")
+                yield Input(placeholder="Document URL", id="document_url")
+                yield Button("Process Document", id="process_document")
+        
+                # Add a radio button to switch between Ollama and RAG
+                with RadioSet(id="system_selector"):
+                    yield RadioButton("Ollama", id="use_ollama", value=True)
+                    yield RadioButton("RAG", id="use_rag")
+
             with TabPane("Log", id="log-tab-pane"):
                 with VerticalScroll(id="log-vertical-scroll"):
                     yield Static("Awaiting logging information", id="log")       
@@ -950,6 +965,9 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
             self.transcriber = None  # Reset the transcriber
             logging.info(f"Changed transcription method to: {event.pressed.label}")
             logging.info(f"Current transcription method: {self.transcription_method}")
+        elif event.radio_set.id == "system_selector":
+            self.current_system = "rag" if event.pressed.id == "use_rag" else "ollama"
+            self.notify(f"Switched to {self.current_system.upper()} system")
 
         # if event.radio_set.id == "prompt_selector":
         #     selected_value = event.pressed.id.split("_", 1)[1]  # Extract value from radio button id
@@ -1093,6 +1111,15 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
             self.processing_status = message.status
             self.update_ollama_display()
 
+    def on_ollama_host_changed(self, event: Input.Changed) -> None:
+        if event.input.id == "ollama_host":
+            # Update Ollama host for both OllamaAPI and RAG system
+            self.ollama_host = event.value
+            self.ollama_api.update_settings(self.ollama_host, self.ollama_api.model)
+            if self.rag_system:
+                self.rag_system.update_ollama_server(self.ollama_host)
+            self.notify(f"Ollama host updated to: {self.ollama_host}")
+            
     #def update_ollama_display(self):
         #logging.info(self.ollama_conversation)
         #self.ollama_conversation = self.ollama_api.get_responses()
@@ -1298,6 +1325,43 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
             self.play_llm_output()
         elif event.button.id == "stop_audio":
             self.stop_audio_playback()
+        elif event.button.id == "initialize_rag":
+            self.initialize_rag_system()
+        elif event.button.id == "process_document":
+            self.process_rag_document()
+
+    def initialize_rag_system(self):
+        ollama_server = self.ollama_host
+        milvus_host = self.query_one("#rag_milvus_host").value
+        milvus_port = self.query_one("#rag_milvus_port").value
+        
+        if ollama_server and milvus_host and milvus_port:
+            self.rag_system = RAGSystem(ollama_server, milvus_host, milvus_port)
+            self.notify("RAG system initialized successfully")
+        else:
+            self.notify("Please provide all RAG system settings", severity="error")
+
+    def process_rag_document(self):
+        if not self.rag_system:
+            self.notify("Please initialize the RAG system first", severity="error")
+            return
+
+        document_url = self.query_one("#document_url").value
+        if not document_url:
+            self.notify("Please provide a document URL", severity="error")
+            return
+
+        try:
+            response = requests.get(document_url)
+            response.raise_for_status()
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
+                temp_file.write(response.content)
+                temp_file_path = temp_file.name
+
+            self.rag_system.process_document(temp_file_path)
+            self.notify(f"Document processed successfully: {document_url}")
+        except Exception as e:
+            self.notify(f"Error processing document: {str(e)}", severity="error")
 
     def play_llm_output(self):
         if self.orca_streamer:
@@ -1356,9 +1420,22 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
     def submit_user_input(self):
         user_input = self.query_one("#user_input").text
         if user_input.strip():
-            self.ollama_api.append_to_transcription(f"\nUser input: {user_input}")
-            self.force_process_transcription()
-            self.query_one("#user_input").clear()  # Clear the input after submission
+            if self.current_system == "ollama":
+                self.ollama_api.append_to_transcription(f"\nUser input: {user_input}")
+                self.force_process_transcription()
+            else:
+                if self.rag_system:
+                    result = self.rag_system.query(user_input)
+                    self.ollama_conversation = f"User: {user_input}\n\nRAG: {result['answer']}"
+                    if result['source'] == 'retrieval':
+                        self.ollama_conversation += "\n\nSource Documents:"
+                        for i, doc in enumerate(result['source_documents'], 1):
+                            self.ollama_conversation += f"\nDocument {i}:\nContent: {doc.page_content[:100]}...\nMetadata: {doc.metadata}\n"
+                    self.update_ollama_display()
+                else:
+                    self.notify("RAG system is not initialized", severity="error")
+            self.query_one("#user_input").clear()
+
 
     def add_solution_prompt(self):
         prompt_addition = "\nPlease provide a detailed solution with the information given."
@@ -1476,6 +1553,8 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
             self.log_thread.join(timeout=2)
         if self.orca_streamer:
             self.orca_streamer.stop_and_clear()
+        if self.rag_system:
+            self.rag_system.cleanup()        
         logging.info("Cleanup complete.")
 
     def exit(self, *args, **kwargs):
