@@ -145,54 +145,58 @@ def create_general_knowledge_chain(llm):
     )
 
 def process_document(file_path: str, system: Dict[str, Any]) -> None:
-    vector_store = system["vector_store"]
-    doc_tracker = system["document_tracker"]
-    embedding_dim = system["embedding_dim"]
+    try:    
+        vector_store = system["vector_store"]
+        doc_tracker = system["document_tracker"]
+        embedding_dim = system["embedding_dim"]
 
-    doc_id = hashlib.md5(file_path.encode()).hexdigest()
+        doc_id = hashlib.md5(file_path.encode()).hexdigest()
 
-    if document_exists(doc_tracker, doc_id):
-        print(f"Document {file_path} has already been processed. Skipping.")
-        return
+        if document_exists(doc_tracker, doc_id):
+            print(f"Document {file_path} has already been processed. Skipping.")
+            return
 
-    loader = PyPDFLoader(file_path)
-    data = loader.load()
+        loader = PyPDFLoader(file_path)
+        data = loader.load()
 
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=0)
-    
-    print("Splitting document...")
-    all_splits = text_splitter.split_documents(data)
-
-    texts, metadatas, ids = [], [], []
-    
-    print("Preparing document chunks...")
-    for split in tqdm(all_splits, desc="Processing chunks"):
-        split.metadata['doc_id'] = doc_id
-        texts.append(split.page_content)
-        metadatas.append(split.metadata)
-        ids.append(str(uuid.uuid4()))
-
-    print("Adding to vector store...")
-    batch_size = 100
-    for i in tqdm(range(0, len(texts), batch_size), desc="Inserting batches"):
-        batch_texts = texts[i:i+batch_size]
-        batch_metadatas = metadatas[i:i+batch_size]
-        batch_ids = ids[i:i+batch_size]
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=0)
         
-        vector_store.add_texts(
-            texts=batch_texts,
-            metadatas=batch_metadatas,
-            ids=batch_ids
-        )
+        print("Splitting document...")
+        all_splits = text_splitter.split_documents(data)
 
-    collection = vector_store.col
-    collection.flush()
-    print(f"Inserted {len(texts)} chunks into the vector store.")
-    print(f"Total entities in collection after insertion: {collection.num_entities}")
+        texts, metadatas, ids = [], [], []
+        
+        print("Preparing document chunks...")
+        for split in tqdm(all_splits, desc="Processing chunks"):
+            split.metadata['doc_id'] = doc_id
+            texts.append(split.page_content)
+            metadatas.append(split.metadata)
+            ids.append(str(uuid.uuid4()))
 
-    mark_document_processed(doc_tracker, doc_id, embedding_dim)
-    print(f"Document {file_path} has been processed and added to the vector store.")
+        print("Adding to vector store...")
+        batch_size = 100
+        for i in tqdm(range(0, len(texts), batch_size), desc="Inserting batches"):
+            batch_texts = texts[i:i+batch_size]
+            batch_metadatas = metadatas[i:i+batch_size]
+            batch_ids = ids[i:i+batch_size]
+            
+            vector_store.add_texts(
+                texts=batch_texts,
+                metadatas=batch_metadatas,
+                ids=batch_ids
+            )
 
+        collection = vector_store.col
+        collection.flush()
+        print(f"Inserted {len(texts)} chunks into the vector store.")
+        print(f"Total entities in collection after insertion: {collection.num_entities}")
+
+        mark_document_processed(doc_tracker, doc_id, embedding_dim)
+        print(f"Document {file_path} has been processed and added to the vector store.")
+    except Exception as e:
+        print(f"Error processing document: {str(e)}")
+        raise  # Re-raise the exception to be caught by the calling method
+    
 def query_system(query: str, system: Dict[str, Any]) -> Dict[str, Any]:
     retrieval_chain = system["retrieval_chain"]
     general_chain = system["general_chain"]

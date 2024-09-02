@@ -1119,7 +1119,7 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
             if self.rag_system:
                 self.rag_system.update_ollama_server(self.ollama_host)
             self.notify(f"Ollama host updated to: {self.ollama_host}")
-            
+
     #def update_ollama_display(self):
         #logging.info(self.ollama_conversation)
         #self.ollama_conversation = self.ollama_api.get_responses()
@@ -1350,15 +1350,9 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
         if not document_url:
             self.notify("Please provide a document URL", severity="error")
             return
-
         try:
-            response = requests.get(document_url)
-            response.raise_for_status()
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
-                temp_file.write(response.content)
-                temp_file_path = temp_file.name
-
-            self.rag_system.process_document(temp_file_path)
+            # Process the document
+            self.rag_system.process_document(document_url)
             self.notify(f"Document processed successfully: {document_url}")
         except Exception as e:
             self.notify(f"Error processing document: {str(e)}", severity="error")
@@ -1425,8 +1419,12 @@ into pre-made large language model (LLM) prompt templates and capturing the resp
                 self.force_process_transcription()
             else:
                 if self.rag_system:
+                    self.notify(user_input, severity="info")
+                    self.log(f"Submitting user input: {user_input}")
                     result = self.rag_system.query(user_input)
+                    self.notify(result['answer'], severity="info")
                     self.ollama_conversation = f"User: {user_input}\n\nRAG: {result['answer']}"
+                    self.log(f"Conversation: {self.ollama_conversation}")
                     if result['source'] == 'retrieval':
                         self.ollama_conversation += "\n\nSource Documents:"
                         for i, doc in enumerate(result['source_documents'], 1):
