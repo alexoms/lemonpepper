@@ -66,7 +66,8 @@ def initialize_system(ollama_server: str, milvus_host: str, milvus_port: str):
 
     # Set up the Ollama LLM
     llm = Ollama(
-        model="llama3.1:latest",
+        #model="chatgpt-4",
+         model="llama3.1:latest",
         base_url=ollama_server,
         callback_manager=CallbackManager([StreamingStdOutCallbackHandler()]),
         stop=["<|eot_id|>"],
@@ -294,7 +295,8 @@ def main():
     
     rag_system = RAGSystem(ollama_server, milvus_host, milvus_port)
     
-    file_path = "https://www.congress.gov/118/bills/hr8785/BILLS-118hr8785ih.pdf"
+    file_path = "http://192.168.1.81:5000/inc/alex_chang_resume_202409.pdf"
+    # file_path = "https://www.congress.gov/118/bills/hr8785/BILLS-118hr8785ih.pdf"
     print(f"Processing document: {file_path}")
     rag_system.process_document(file_path)
 
