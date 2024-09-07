@@ -1,6 +1,6 @@
 from langchain_milvus_rag_chat_api import RAGSystem
 from langchain.agents import AgentType, initialize_agent, Tool
-from langchain.tools import ShellTool
+from langchain_community.tools import ShellTool
 from langchain_community.llms import Ollama
 from langchain.callbacks.manager import CallbackManager
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
@@ -59,14 +59,61 @@ class ExtendedRAGSystem:
     def process_document(self, file_path: str) -> None:
         self.rag_system.process_document(file_path)
 
+    def handle_file_creation(self, query: str, content: str) -> str:
+        file_name_match = re.search(r'save.*as.*?(\w+\.\w+)', query, re.IGNORECASE)
+        if file_name_match:
+            file_name = file_name_match.group(1)
+            code_content = self.extract_code(content)
+            if code_content:
+                result = self.create_file(file_name, code_content)
+                return f"File creation result: {result}"
+            else:
+                return "Could not extract Python code from the response."
+        else:
+            return "Could not determine the file name from the query."
+
+    def extract_code(self, content: str) -> str:
+        # Extract code between triple backticks
+        code_blocks = re.findall(r'```python(.*?)```', content, re.DOTALL)
+        if code_blocks:
+            # Return the last code block (in case there are multiple)
+            code = code_blocks[-1].strip()
+        else:
+            # If no code blocks found, try to extract based on indentation
+            lines = content.split('\n')
+            code_lines = [line for line in lines if line.strip().startswith('def ') or line.strip().startswith('import ') or '    ' in line]
+            code = '\n'.join(code_lines)
+        
+        # Remove comments about saving the script
+        code_lines = [line for line in code.split('\n') if not line.strip().startswith('# Save this script')]
+        
+        # Remove any trailing shell prompt characters or other non-code content
+        code = '\n'.join(code_lines)
+        code = re.sub(r'[\s%#>]+$', '', code, flags=re.MULTILINE)
+        
+        # Ensure no trailing whitespace or newlines
+        return code.rstrip()
+
     def create_file(self, file_name: str, content: str) -> str:
         try:
             file_path = os.path.join(self.working_dir, file_name)
+            
+            # Clean the content
+            cleaned_content = self.clean_content(content)
+            
             with open(file_path, 'w', encoding='utf-8') as f:
-                f.write(content)
+                f.write(cleaned_content)
             return f"File '{file_name}' created successfully in {self.working_dir}"
         except Exception as e:
             return f"Error creating file: {str(e)}"
+
+    def clean_content(self, content: str) -> str:
+        # Remove any trailing whitespace, newlines, or shell artifacts
+        cleaned = re.sub(r'\s*%.*$', '', content, flags=re.MULTILINE)
+        cleaned = cleaned.rstrip()
+        
+        # Ensure the content ends with a single newline
+        return cleaned + '\n'
 
     def run_shell_command(self, command: str) -> str:
         try:
@@ -87,6 +134,14 @@ class ExtendedRAGSystem:
 
     def query(self, query: str) -> Dict[str, Any]:
         rag_result = self.rag_system.query(query)
+        
+        # Check if the query involves file creation
+        if "save" in query.lower() and "file" in query.lower():
+            file_creation_result = self.handle_file_creation(query, rag_result['answer'])
+            return {
+                "answer": f"{rag_result['answer']}\n\n{file_creation_result}",
+                "source": "rag_and_file_creation"
+            }
         
         shell_decision = self.shell_command_chain.run(query=query, response=rag_result['answer'], working_dir=self.working_dir)
         
