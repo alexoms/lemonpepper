@@ -1,0 +1,1 @@
+az acr create --resource-group your-resource-group --name your-acr --sku Basic

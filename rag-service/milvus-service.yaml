@@ -1,0 +1,66 @@
+---
+apiVersion: 2023-05-01
+location: eastus
+name: milvus-service
+resourceGroup: your-resource-group
+type: Microsoft.App/containerApps
+properties:
+  managedEnvironmentId: /subscriptions/{subscription-id}/resourceGroups/{resource-group}/providers/Microsoft.App/managedEnvironments/{environment-name}
+  configuration:
+    activeRevisionsMode: single
+    secrets:
+      - name: minio-access-key
+        value: "minioadmin"
+      - name: minio-secret-key
+        value: "minioadmin"
+  template:
+    containers:
+      - name: milvus
+        image: milvusdb/milvus:v2.3.3
+        command: ["milvus", "run", "standalone"]
+        env:
+          - name: ETCD_ENDPOINTS
+            value: "etcd-service:2379"
+          - name: MINIO_ADDRESS
+            value: "minio-service:9000"
+        resources:
+          cpu: 1
+          memory: "2Gi"
+      - name: etcd
+        image: quay.io/coreos/etcd:v3.5.5
+        env:
+          - name: ETCD_AUTO_COMPACTION_MODE
+            value: "revision"
+          - name: ETCD_AUTO_COMPACTION_RETENTION
+            value: "1000"
+          - name: ETCD_QUOTA_BACKEND_BYTES
+            value: "4294967296"
+        command: 
+          - "/usr/local/bin/etcd"
+          - "-advertise-client-urls=http://127.0.0.1:2379"
+          - "-listen-client-urls=http://0.0.0.0:2379"
+          - "--data-dir=/etcd"
+        volumeMounts:
+          - mountPath: /etcd
+            volumeName: etcd-data
+      - name: minio
+        image: minio/minio:RELEASE.2023-03-20T20-16-18Z
+        env:
+          - name: MINIO_ACCESS_KEY
+            secretRef: minio-access-key
+          - name: MINIO_SECRET_KEY
+            secretRef: minio-secret-key
+        command: ["minio", "server", "/minio_data"]
+        volumeMounts:
+          - mountPath: /minio_data
+            volumeName: minio-data
+    volumes:
+      - name: etcd-data
+        storageType: AzureFile
+        storageName: etcd-storage
+      - name: minio-data
+        storageType: AzureFile
+        storageName: minio-storage
+    scale:
+      minReplicas: 1
+      maxReplicas: 1

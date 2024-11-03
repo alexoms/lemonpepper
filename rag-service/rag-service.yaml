@@ -1,0 +1,35 @@
+apiVersion: 2023-05-01
+location: eastus
+name: rag-service
+resourceGroup: your-resource-group
+type: Microsoft.App/containerApps
+properties:
+  managedEnvironmentId: /subscriptions/{subscription-id}/resourceGroups/{resource-group}/providers/Microsoft.App/managedEnvironments/{environment-name}
+  configuration:
+    activeRevisionsMode: single
+    secrets:
+      - name: milvus-connection-string
+        value: "host=milvus-service port=19530"
+      - name: ollama-connection-string
+        value: "http://ollama-service:11434"
+    ingress:
+      external: true
+      targetPort: 8000
+  template:
+    containers:
+      - name: rag-service
+        image: your-acr.azurecr.io/rag-service:latest
+        env:
+          - name: MILVUS_HOST
+            secretRef: milvus-connection-string
+          - name: OLLAMA_SERVER
+            secretRef: ollama-connection-string
+        resources:
+          cpu: 1
+          memory: "2Gi"
+          gpu:
+            count: 1
+            sku: V100
+    scale:
+      minReplicas: 1
+      maxReplicas: 1
