@@ -1,0 +1,99 @@
+location: ${AZURE_REGION}
+resourceGroup: ${AZURE_RESOURCE_GROUP}
+name: milvus-service
+properties:
+  environmentId: /subscriptions/${AZURE_SUBSCRIPTION_ID}/resourceGroups/${AZURE_RESOURCE_GROUP}/providers/Microsoft.App/managedEnvironments/${CONTAINER_APPS_ENV_NAME}
+  volumes: # Array of volumes available to the instances
+  - name: ${STORAGE_SHARE_ETCD}
+    azureFile:
+      shareName: ${STORAGE_SHARE_ETCD}
+      readOnly: false
+      storageAccountName: ${STORAGE_ACCOUNT_NAME}
+      storageAccountKey: ${STORAGE_KEY}
+  - name: ${STORAGE_SHARE_MINIO}
+    azureFile:
+      shareName: ${STORAGE_SHARE_MINIO}
+      readOnly: false
+      storageAccountName: ${STORAGE_ACCOUNT_NAME}
+      storageAccountKey: ${STORAGE_KEY}
+  configuration:
+    activeRevisionsMode: Single
+    ingress:
+      external: false
+      targetPort: 19530
+      allowInsecure: false
+      transport: auto
+    registries:
+      - server: ${ACR_LOGIN_SERVER}
+        username: ${ACR_USERNAME}
+        passwordSecretRef: acr-password
+    secrets:
+      - name: acr-password
+        value: ${ACR_PASSWORD}
+      - name: storage-key
+        value: ${STORAGE_KEY}
+    storage:
+      - name: ${STORAGE_SHARE_ETCD}
+        azureFile:
+          accountKey: ${STORAGE_KEY}
+          accountName: ${STORAGE_ACCOUNT_NAME}
+          shareName: ${STORAGE_SHARE_ETCD}
+          accessMode: ReadWrite
+      - name: ${STORAGE_SHARE_MINIO}
+        azureFile:
+          accountKey: ${STORAGE_KEY}
+          accountName: ${STORAGE_ACCOUNT_NAME}
+          shareName: ${STORAGE_SHARE_MINIO}
+          accessMode: ReadWrite
+  template:
+    volumes:  
+        - name: ${STORAGE_SHARE_ETCD}  
+          storageType: AzureFile  
+          storageName: ${STORAGE_SHARE_ETCD} 
+        - name: ${STORAGE_SHARE_MINIO} 
+          storageType: AzureFile  
+          storageName: ${STORAGE_SHARE_MINIO}
+    containers:
+      - name: milvus
+        image: ${ACR_LOGIN_SERVER}/milvus:v2.3.3
+        resources:
+          cpu: 0.75
+          memory: 1.5Gi
+        env:
+          - name: ETCD_ENDPOINTS
+            value: localhost:2379
+          - name: MINIO_ADDRESS
+            value: localhost:9000
+      - name: etcd
+        image: ${ACR_LOGIN_SERVER}/etcd:v3.5.5
+        resources:
+          cpu: 0.5
+          memory: 1.0Gi
+        command: ["/usr/local/bin/etcd"]
+        args: 
+          - "-advertise-client-urls=http://localhost:2379"
+          - "-listen-client-urls=http://0.0.0.0:2379"
+          - "--data-dir=/etcd"
+        volumeMounts:
+        - volumeName: ${STORAGE_SHARE_ETCD}
+          mountPath: /etcd
+          
+      - name: minio
+        image: ${ACR_LOGIN_SERVER}/minio:RELEASE.2023-03-20T20-16-18Z
+        resources:
+          cpu: 0.25
+          memory: 0.5Gi
+        command: ["minio"]
+        args: ["server", "/data"]
+        env:
+          - name: MINIO_ACCESS_KEY
+            value: minioadmin
+          - name: MINIO_SECRET_KEY
+            value: minioadmin
+        volumeMounts:
+        - volumeName: ${STORAGE_SHARE_MINIO}
+          mountPath: /data
+          
+    scale:
+      minReplicas: 1
+      maxReplicas: 1

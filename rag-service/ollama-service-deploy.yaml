@@ -1,0 +1,30 @@
+---
+apiVersion: 2023-05-01
+location: eastus
+name: ollama-service
+resourceGroup: RandDai-001
+type: Microsoft.App/containerApps
+properties:
+  managedEnvironmentId: /subscriptions/fdf1d582-0d39-4030-a125-53a231da7454/resourceGroups/{resource-group}/providers/Microsoft.App/managedEnvironments/randai-env
+  configuration:
+    activeRevisionsMode: single
+  template:
+    containers:
+      - name: ollama
+        image: randdaiacr.azurecr.io/ollama:latest
+        resources:
+          cpu: 2
+          memory: "4Gi"
+          gpu:
+            count: 1
+            sku: V100
+        volumeMounts:
+          - mountPath: /root/.ollama
+            volumeName: ollama-data
+    volumes:
+      - name: ollama-data
+        storageType: AzureFile
+        storageName: ollama-storage
+    scale:
+      minReplicas: 1
+      maxReplicas: 1
