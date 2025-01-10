@@ -9,3 +9,4 @@ textual-slider
 ollama
 pyperclip
 rich
+aiohttp

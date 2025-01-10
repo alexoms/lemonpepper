@@ -47,10 +47,10 @@ from textual.binding import Binding
 import re
 from textual.message import Message
 from rich.markdown import Markdown as RichMarkdown
-from .ollama_api import OllamaAPI
-from .transcribe_audio import AudioTranscriber
-from .transcribe_audio_whisper import WhisperStreamTranscriber
-from .PicovoiceOrcaStreamer import PicovoiceOrcaStreamer
+from lemonpepper.ollama_api import OllamaAPI
+from lemonpepper.transcribe_audio import AudioTranscriber
+from lemonpepper.transcribe_audio_whisper import WhisperStreamTranscriber
+from lemonpepper.PicovoiceOrcaStreamer import PicovoiceOrcaStreamer
 from rich.console import Console
 from rich.text import Text
 from pyperclip import copy as copy_to_clipboard
@@ -60,8 +60,8 @@ from rich.text import Text
 from rich.style import Style
 from textual.timer import Timer
 import threading
-from .utils import get_model_directory
-from .model_manager import ModelDownloadButton
+from lemonpepper.utils import get_model_directory
+from lemonpepper.model_manager import ModelDownloadButton
 from textual import work
 import httpx
 import appdirs
