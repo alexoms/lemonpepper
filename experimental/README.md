@@ -1,39 +1,119 @@
-# Speech Demo - Experimental
+# Voice Interaction API - Experimental
 
-This experimental project demonstrates real-time speech-to-text (STT) and text-to-speech (TTS) capabilities using the lemonpepper library components.
+Complete voice interaction system with speech-to-text, text-to-speech, and MCP integration for AI agents.
+
+## 🚀 Quick Start with Docker
+
+```bash
+cd experimental
+
+# Setup environment
+cp .env.example .env
+# Edit .env and add your PICOVOICE_ACCESS_KEY
+
+# Deploy everything
+./deploy.sh deploy
+
+# Access services
+# Frontend:  http://localhost:3000
+# API Docs:  http://localhost:8000/docs
+# Health:    http://localhost:8000/health
+```
+
+That's it! 🎉
 
 ## Features
 
-- **Speech-to-Text**: Real-time transcription using Whisper through WebSocket streaming
+### Core Capabilities
+- **Speech-to-Text**: Real-time transcription using Whisper
 - **Text-to-Speech**: Natural voice synthesis using Picovoice Orca
+- **Multiple Protocols**: REST, WebSocket, and SSE streaming
 - **Web Interface**: Modern React frontend with TypeScript
-- **Streaming Audio**: Efficient audio processing and streaming
+- **MCP Integration**: Tools for Claude agents to enable voice interactions
+- **Docker Deployment**: Fully containerized with docker-compose
+
+### API Features
+- ✅ REST endpoints for synchronous operations
+- ✅ WebSocket for bidirectional streaming
+- ✅ Server-Sent Events (SSE) for audio streaming
+- ✅ OpenAPI/Swagger documentation
+- ✅ Health monitoring
+- ✅ CORS configured for web access
+
+### MCP Tools for Agents
+- `transcribe_audio` - Convert speech to text
+- `synthesize_speech` - Convert text to speech
+- `voice_conversation` - Complete interaction loop
+- `check_voice_api_health` - Service status
 
 ## Project Structure
 
 ```
 experimental/
-├── backend/          # Python FastAPI server
-│   ├── server.py     # Main server with WebSocket and REST endpoints
+├── backend/              # Python FastAPI server
+│   ├── server_enhanced.py   # Enhanced server with REST, WS, SSE
+│   ├── Dockerfile
 │   └── requirements.txt
-└── web/              # React frontend
-    └── speech-demo/  # React TypeScript app
+├── web/speech-demo/      # React TypeScript frontend
+│   ├── src/
+│   ├── Dockerfile
+│   └── nginx.conf
+├── mcp-server/           # MCP server for Claude agents
+│   ├── server.py
+│   ├── Dockerfile
+│   └── requirements.txt
+├── models/               # Whisper models directory
+├── docker-compose.yml    # Orchestration
+├── deploy.sh            # Deployment script
+├── DEPLOYMENT.md        # Full deployment guide
+└── .env.example         # Environment template
 ```
 
 ## Prerequisites
 
-### Backend Requirements
-- Python 3.8+
-- Whisper model file (e.g., `ggml-base.en.bin`)
-- Picovoice Access Key (for Orca TTS)
+### For Docker Deployment (Recommended)
+- Docker 20.10+
+- Docker Compose 2.0+
+- 4GB RAM minimum
+- Picovoice Access Key ([Get Free Key](https://console.picovoice.ai/))
+- Whisper model (auto-downloaded by deploy script)
 
-### Frontend Requirements
-- Node.js 16+
-- npm or yarn
+### For Manual Setup
+- Python 3.10+
+- Node.js 18+
+- Whisper model file
+- Picovoice Access Key
 
-## Setup Instructions
+## Deployment Options
 
-### Backend Setup
+### Option 1: Docker (Recommended) 🐳
+
+**One-command deployment:**
+
+```bash
+cd experimental
+./deploy.sh deploy
+```
+
+The script will:
+1. Check prerequisites
+2. Setup environment
+3. Download Whisper model
+4. Build containers
+5. Start all services
+
+**Other commands:**
+```bash
+./deploy.sh start    # Start services
+./deploy.sh stop     # Stop services
+./deploy.sh logs     # View logs
+./deploy.sh status   # Check status
+./deploy.sh help     # Show all commands
+```
+
+### Option 2: Manual Setup
+
+#### Backend Setup
 
 1. Navigate to the backend directory:
 ```bash
@@ -98,13 +178,22 @@ The app will open at `http://localhost:3000`
 
 ## API Endpoints
 
-### WebSocket
-- `ws://localhost:8000/ws/stt` - Speech-to-text streaming
+Full interactive documentation available at http://localhost:8000/docs
 
-### REST
+### Speech-to-Text
+- `POST /api/stt` - REST endpoint (single audio chunk)
+- `POST /api/stt/stream` - SSE streaming
+- `ws://localhost:8000/ws/stt` - WebSocket streaming
+
+### Text-to-Speech
+- `POST /api/tts` - REST endpoint (returns WAV file)
+- `POST /api/tts/sse` - SSE streaming (audio chunks)
+
+### Information
 - `GET /` - API information
 - `GET /health` - Health check
-- `POST /api/tts/stream` - Text-to-speech synthesis
+- `GET /docs` - Swagger UI
+- `GET /openapi.json` - OpenAPI specification
 
 ## Technical Details
 
@@ -149,11 +238,66 @@ If the WebSocket fails to connect, verify:
 - The frontend includes proper cleanup of audio resources
 - Both components are designed for low-latency operation
 
+## Using with Claude Agents
+
+This API is exposed via MCP (Model Context Protocol) for agentic workflows.
+
+### MCP Configuration
+
+Add to your Claude Desktop config:
+
+```json
+{
+  "mcpServers": {
+    "voice-interaction": {
+      "command": "docker",
+      "args": [
+        "compose", "-f", "/path/to/experimental/docker-compose.yml",
+        "exec", "-T", "mcp-server", "python", "server.py"
+      ]
+    }
+  }
+}
+```
+
+### Example Agent Workflow
+
+```python
+# User speaks to agent
+user_audio = capture_microphone()
+
+# Agent transcribes
+text = mcp.call_tool("transcribe_audio", {
+    "audio_data": user_audio
+})
+
+# Agent processes and responds
+response = agent.process(text)
+
+# Agent speaks back
+audio = mcp.call_tool("synthesize_speech", {
+    "text": response
+})
+
+play_audio(audio)
+```
+
+See `mcp-server/README.md` for full MCP documentation.
+
+## Documentation
+
+- **[DEPLOYMENT.md](DEPLOYMENT.md)** - Complete deployment guide
+- **[QUICKSTART.md](QUICKSTART.md)** - 5-minute quick start
+- **[backend/README.md](backend/README.md)** - Backend API details
+- **[mcp-server/README.md](mcp-server/README.md)** - MCP integration
+- **API Docs**: http://localhost:8000/docs (when running)
+
 ## Future Enhancements
 
-- Add voice activity detection (VAD)
-- Support multiple languages
-- Add recording history
-- Implement audio visualization
-- Add user authentication
-- Support custom voice models
+- Voice activity detection (VAD)
+- Multi-language support
+- Recording history and playback
+- Audio visualization
+- User authentication and rate limiting
+- Custom voice models
+- Kubernetes deployment configs

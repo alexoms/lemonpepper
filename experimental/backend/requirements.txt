@@ -7,3 +7,6 @@ pywhispercpp
 pvorca
 sounddevice
 aiohttp
+sse-starlette
+pydantic
+mcp

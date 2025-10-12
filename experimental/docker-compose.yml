@@ -1,0 +1,75 @@
+version: '3.8'
+
+services:
+  # Backend API service
+  backend:
+    build:
+      context: ..
+      dockerfile: experimental/backend/Dockerfile
+    container_name: voice-api-backend
+    environment:
+      - WHISPER_MODEL_PATH=/app/models/ggml-base.en.bin
+      - PICOVOICE_ACCESS_KEY=${PICOVOICE_ACCESS_KEY}
+    volumes:
+      # Mount model directory for Whisper models
+      - ./models:/app/models:ro
+      # Mount for development (optional, comment out in production)
+      # - ./backend/server_enhanced.py:/app/server.py:ro
+    ports:
+      - "8000:8000"
+    networks:
+      - voice-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Frontend web app
+  frontend:
+    build:
+      context: ./web/speech-demo
+      dockerfile: Dockerfile
+    container_name: voice-api-frontend
+    environment:
+      - REACT_APP_API_URL=http://localhost:8000
+    ports:
+      - "3000:80"
+    networks:
+      - voice-network
+    depends_on:
+      - backend
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+  # MCP Server for Claude agents
+  mcp-server:
+    build:
+      context: ./mcp-server
+      dockerfile: Dockerfile
+    container_name: voice-mcp-server
+    environment:
+      - VOICE_API_URL=http://backend:8000
+      - API_TIMEOUT=30
+    networks:
+      - voice-network
+    depends_on:
+      - backend
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+
+networks:
+  voice-network:
+    driver: bridge
+    name: voice-interaction-network
+
+volumes:
+  models:
+    driver: local
