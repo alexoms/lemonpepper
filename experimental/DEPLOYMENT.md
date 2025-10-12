@@ -68,17 +68,17 @@ docker-compose up -d
 docker-compose ps
 
 # Check health
-curl http://localhost:8000/health
+curl http://localhost:14300/health
 
 # View logs
 docker-compose logs -f
 ```
 
 ### 6. Access Services
-- **Frontend**: http://localhost:3000
-- **API Documentation**: http://localhost:8000/docs
-- **OpenAPI Spec**: http://localhost:8000/openapi.json
-- **Health Check**: http://localhost:8000/health
+- **Frontend**: http://localhost:14301
+- **API Documentation**: http://localhost:14300/docs
+- **OpenAPI Spec**: http://localhost:14300/openapi.json
+- **Health Check**: http://localhost:14300/health
 
 ## Configuration
 
@@ -93,7 +93,7 @@ PICOVOICE_ACCESS_KEY=your_key_here
 # Optional (defaults shown)
 WHISPER_MODEL_PATH=/app/models/ggml-base.en.bin
 API_TIMEOUT=30
-REACT_APP_API_URL=http://localhost:8000
+REACT_APP_API_URL=http://localhost:14300
 ```
 
 ### Model Selection
@@ -260,7 +260,7 @@ play_audio(decode_base64(audio))
 
 #### GET /health
 ```bash
-curl http://localhost:8000/health
+curl http://localhost:14300/health
 ```
 
 Response:
@@ -275,14 +275,14 @@ Response:
 
 #### POST /api/stt
 ```bash
-curl -X POST http://localhost:8000/api/stt \
+curl -X POST http://localhost:14300/api/stt \
   -H "Content-Type: application/json" \
   -d '{"audio_data": "base64_audio_here"}'
 ```
 
 #### POST /api/tts
 ```bash
-curl -X POST http://localhost:8000/api/tts \
+curl -X POST http://localhost:14300/api/tts \
   -H "Content-Type: application/json" \
   -d '{"text": "Hello world"}' \
   --output speech.wav
@@ -290,7 +290,7 @@ curl -X POST http://localhost:8000/api/tts \
 
 #### POST /api/tts/sse (Server-Sent Events)
 ```bash
-curl -N -X POST http://localhost:8000/api/tts/sse \
+curl -N -X POST http://localhost:14300/api/tts/sse \
   -H "Content-Type: application/json" \
   -d '{"text": "Hello world"}'
 ```
@@ -318,7 +318,7 @@ Receive:
 
 ### Interactive Documentation
 
-Visit http://localhost:8000/docs for Swagger UI with:
+Visit http://localhost:14300/docs for Swagger UI with:
 - Full API reference
 - Interactive testing
 - Request/response schemas
@@ -487,7 +487,7 @@ docker-compose up -d --no-deps --build frontend
 For issues and questions:
 - GitHub Issues: https://github.com/alexoms/lemonpepper/issues
 - Documentation: See README.md files in each directory
-- API Docs: http://localhost:8000/docs
+- API Docs: http://localhost:14300/docs
 
 ## License
 

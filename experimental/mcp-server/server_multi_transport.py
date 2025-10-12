@@ -46,7 +46,7 @@ logger = logging.getLogger("voice-mcp-server")
 API_BASE_URL = os.getenv("VOICE_API_URL", "http://backend:8000")
 API_TIMEOUT = int(os.getenv("API_TIMEOUT", "30"))
 MCP_TRANSPORT = os.getenv("MCP_TRANSPORT", "stdio")  # stdio, http, or both
-MCP_HTTP_PORT = int(os.getenv("MCP_HTTP_PORT", "8001"))
+MCP_HTTP_PORT = int(os.getenv("MCP_HTTP_PORT", "14302"))
 MCP_HTTP_HOST = os.getenv("MCP_HTTP_HOST", "0.0.0.0")
 
 # Create MCP server

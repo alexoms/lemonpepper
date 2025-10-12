@@ -118,7 +118,7 @@ start_services() {
     sleep 5
 
     # Check health
-    if curl -sf http://localhost:8000/health > /dev/null; then
+    if curl -sf http://localhost:14300/health > /dev/null; then
         log_info "✓ Backend is healthy"
     else
         log_warn "Backend may not be ready yet"
@@ -141,7 +141,7 @@ show_status() {
 
     echo ""
     log_info "Health Check:"
-    curl -s http://localhost:8000/health | python -m json.tool || log_warn "Backend not responding"
+    curl -s http://localhost:14300/health | python -m json.tool || log_warn "Backend not responding"
 }
 
 # Show logs
@@ -162,8 +162,8 @@ show_urls() {
     log_info "==================================="
     echo ""
     echo "  Frontend:     http://localhost:3000"
-    echo "  API Docs:     http://localhost:8000/docs"
-    echo "  Health Check: http://localhost:8000/health"
+    echo "  API Docs:     http://localhost:14300/docs"
+    echo "  Health Check: http://localhost:14300/health"
     echo ""
     log_info "To view logs: ./deploy.sh logs [service]"
     log_info "To stop: ./deploy.sh stop"

@@ -100,18 +100,18 @@ Add to your Claude Desktop MCP configuration:
 
 ## Usage via HTTP/SSE
 
-The HTTP transport exposes a REST API on port 8001.
+The HTTP transport exposes a REST API on port 14302.
 
 ### Endpoints
 
 **GET /tools** - List available tools
 ```bash
-curl http://localhost:8001/tools
+curl http://localhost:14302/tools
 ```
 
 **POST /call-tool** - Call a tool (JSON response)
 ```bash
-curl -X POST http://localhost:8001/call-tool \
+curl -X POST http://localhost:14302/call-tool \
   -H "Content-Type: application/json" \
   -d '{
     "name": "transcribe_audio",
@@ -121,7 +121,7 @@ curl -X POST http://localhost:8001/call-tool \
 
 **POST /call-tool/sse** - Call a tool with SSE streaming
 ```bash
-curl -N -X POST http://localhost:8001/call-tool/sse \
+curl -N -X POST http://localhost:14302/call-tool/sse \
   -H "Content-Type: application/json" \
   -d '{
     "name": "synthesize_speech",
@@ -131,7 +131,7 @@ curl -N -X POST http://localhost:8001/call-tool/sse \
 
 **GET /health** - Health check
 ```bash
-curl http://localhost:8001/health
+curl http://localhost:14302/health
 ```
 
 ### Python Client Example
@@ -142,7 +142,7 @@ import json
 
 # Call tool via HTTP
 response = requests.post(
-    "http://localhost:8001/call-tool",
+    "http://localhost:14302/call-tool",
     json={
         "name": "check_voice_api_health",
         "arguments": {}
@@ -156,7 +156,7 @@ print(result)
 import sseclient
 
 response = requests.post(
-    "http://localhost:8001/call-tool/sse",
+    "http://localhost:14302/call-tool/sse",
     json={
         "name": "synthesize_speech",
         "arguments": {"text": "Hello from HTTP!"}
@@ -209,7 +209,7 @@ play_audio(audio)
 ### stdio mode (default)
 ```bash
 pip install -r requirements.txt
-export VOICE_API_URL=http://localhost:8000
+export VOICE_API_URL=http://localhost:14300
 export MCP_TRANSPORT=stdio
 python server_multi_transport.py
 ```
@@ -217,7 +217,7 @@ python server_multi_transport.py
 ### HTTP mode
 ```bash
 pip install -r requirements.txt
-export VOICE_API_URL=http://localhost:8000
+export VOICE_API_URL=http://localhost:14300
 export MCP_TRANSPORT=http
 export MCP_HTTP_PORT=8001
 python server_multi_transport.py
@@ -226,7 +226,7 @@ python server_multi_transport.py
 ### Both modes concurrently
 ```bash
 pip install -r requirements.txt
-export VOICE_API_URL=http://localhost:8000
+export VOICE_API_URL=http://localhost:14300
 export MCP_TRANSPORT=both
 python server_multi_transport.py
 ```
@@ -255,14 +255,14 @@ docker run -p 8001:8001 \
 The `docker-compose.yml` includes both transports:
 
 - `mcp-server`: stdio transport (for Claude Desktop)
-- `mcp-server-http`: HTTP/SSE transport on port 8001 (for remote access)
+- `mcp-server-http`: HTTP/SSE transport on port 14302 (for remote access)
 
 ```bash
 # Start all services including both MCP transports
 docker-compose up -d
 
 # Access HTTP MCP server
-curl http://localhost:8001/tools
+curl http://localhost:14302/tools
 
 # Use stdio MCP server with Claude Desktop
 # (see Claude Desktop configuration above)

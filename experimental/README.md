@@ -15,9 +15,9 @@ cp .env.example .env
 ./deploy.sh deploy
 
 # Access services
-# Frontend:  http://localhost:3000
-# API Docs:  http://localhost:8000/docs
-# Health:    http://localhost:8000/health
+# Frontend:  http://localhost:14301
+# API Docs:  http://localhost:14300/docs
+# Health:    http://localhost:14300/health
 ```
 
 That's it! 🎉
@@ -136,7 +136,7 @@ export PICOVOICE_ACCESS_KEY=your_picovoice_access_key
 python server.py
 ```
 
-The API will be available at `http://localhost:8000`
+The API will be available at `http://localhost:14300`
 
 ### Frontend Setup
 
@@ -152,7 +152,7 @@ npm install
 
 3. Create a `.env` file (optional, defaults to localhost:8000):
 ```bash
-REACT_APP_API_URL=http://localhost:8000
+REACT_APP_API_URL=http://localhost:14300
 ```
 
 4. Start the development server:
@@ -160,7 +160,7 @@ REACT_APP_API_URL=http://localhost:8000
 npm start
 ```
 
-The app will open at `http://localhost:3000`
+The app will open at `http://localhost:14301`
 
 ## Usage
 
@@ -178,12 +178,12 @@ The app will open at `http://localhost:3000`
 
 ## API Endpoints
 
-Full interactive documentation available at http://localhost:8000/docs
+Full interactive documentation available at http://localhost:14300/docs
 
 ### Speech-to-Text
 - `POST /api/stt` - REST endpoint (single audio chunk)
 - `POST /api/stt/stream` - SSE streaming
-- `ws://localhost:8000/ws/stt` - WebSocket streaming
+- `ws://localhost:14300/ws/stt` - WebSocket streaming
 
 ### Text-to-Speech
 - `POST /api/tts` - REST endpoint (returns WAV file)
@@ -222,7 +222,7 @@ Ensure your browser has permission to access the microphone. The app requires HT
 
 ### WebSocket Connection
 If the WebSocket fails to connect, verify:
-- Backend server is running on port 8000
+- Backend server is running on port 14300
 - CORS is properly configured
 - Firewall allows WebSocket connections
 
@@ -290,7 +290,7 @@ See `mcp-server/README.md` for full MCP documentation.
 - **[QUICKSTART.md](QUICKSTART.md)** - 5-minute quick start
 - **[backend/README.md](backend/README.md)** - Backend API details
 - **[mcp-server/README.md](mcp-server/README.md)** - MCP integration
-- **API Docs**: http://localhost:8000/docs (when running)
+- **API Docs**: http://localhost:14300/docs (when running)
 
 ## Future Enhancements
 

@@ -30,13 +30,13 @@ PICOVOICE_ACCESS_KEY=your_picovoice_key
 python server.py
 ```
 
-Server runs on `http://localhost:8000`
+Server runs on `http://localhost:14300`
 
 ## API Documentation
 
 Once running, visit:
-- Swagger UI: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc`
+- Swagger UI: `http://localhost:14300/docs`
+- ReDoc: `http://localhost:14300/redoc`
 
 ## Endpoints
 

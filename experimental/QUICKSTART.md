@@ -26,7 +26,7 @@ export PICOVOICE_ACCESS_KEY=your_picovoice_access_key
 python server.py
 ```
 
-Backend will run on `http://localhost:8000`
+Backend will run on `http://localhost:14300`
 
 ## Step 2: Start the Frontend
 
@@ -43,7 +43,7 @@ npm install
 npm start
 ```
 
-Frontend will open at `http://localhost:3000`
+Frontend will open at `http://localhost:14301`
 
 ## Step 3: Test It Out
 
@@ -92,13 +92,13 @@ PICOVOICE_ACCESS_KEY=your_key_here
 
 ### Frontend (.env)
 ```bash
-REACT_APP_API_URL=http://localhost:8000
+REACT_APP_API_URL=http://localhost:14300
 ```
 
 ## Next Steps
 
 - Read the full [README.md](README.md) for architecture details
-- Check backend [API documentation](http://localhost:8000/docs) (when running)
+- Check backend [API documentation](http://localhost:14300/docs) (when running)
 - Customize the UI in `web/speech-demo/src/App.tsx`
 - Adjust audio settings in `backend/server.py`
 
