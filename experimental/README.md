@@ -1,8 +1,47 @@
 # Voice Interaction API - Experimental
 
-Complete voice interaction system with speech-to-text, text-to-speech, and MCP integration for AI agents.
+Complete voice interaction system with speech-to-text, text-to-speech, and **MCP integration designed for Claude Agent SDK** (formerly Claude Code SDK) and other AI agent frameworks.
 
-## 🚀 Quick Start with Docker
+## 🚀 Quick Start for Claude Agent SDK
+
+### Step 1: Deploy the Services
+
+```bash
+cd experimental
+./deploy.sh deploy
+```
+
+### Step 2: Configure Your Agent
+
+Create `.mcp.json` in your Claude Agent SDK project:
+
+```json
+{
+  "mcpServers": {
+    "voice-interaction": {
+      "url": "http://localhost:14302",
+      "transport": "http"
+    }
+  }
+}
+```
+
+### Step 3: Use Voice Tools in Your Agent
+
+```typescript
+// Your agent automatically discovers MCP tools from .mcp.json
+const transcription = await agent.callMCPTool("voice-interaction", "transcribe_audio", {
+  audio_data: base64Audio
+});
+
+const speech = await agent.callMCPTool("voice-interaction", "synthesize_speech", {
+  text: "Hello from my agent!"
+});
+```
+
+That's it! 🎉
+
+## 🚀 Quick Start with Docker (All Services)
 
 ```bash
 cd experimental
@@ -40,11 +79,15 @@ That's it! 🎉
 - ✅ Health monitoring
 - ✅ CORS configured for web access
 
-### MCP Tools for Agents
+### MCP Tools for AI Agents
+Exposed via HTTP/SSE for Claude Agent SDK and other frameworks:
 - `transcribe_audio` - Convert speech to text
 - `synthesize_speech` - Convert text to speech
 - `voice_conversation` - Complete interaction loop
 - `check_voice_api_health` - Service status
+
+**Primary Integration**: Claude Agent SDK via `.mcp.json` configuration
+**Alternative**: Direct HTTP API access for custom frameworks
 
 ## Project Structure
 
@@ -238,13 +281,57 @@ If the WebSocket fails to connect, verify:
 - The frontend includes proper cleanup of audio resources
 - Both components are designed for low-latency operation
 
-## Using with Claude Agents
+## Using with AI Agents
 
-This API is exposed via MCP (Model Context Protocol) for agentic workflows.
+This API is exposed via MCP (Model Context Protocol) for AI agent workflows, designed primarily for **Claude Agent SDK**.
 
-### MCP Configuration
+### Claude Agent SDK Integration (Recommended)
 
-Add to your Claude Desktop config:
+**1. Add to your `.mcp.json`:**
+
+```json
+{
+  "mcpServers": {
+    "voice-interaction": {
+      "url": "http://localhost:14302",
+      "transport": "http"
+    }
+  }
+}
+```
+
+**2. Use in your agent code:**
+
+```python
+from claude_agent_sdk import Agent
+
+agent = Agent()
+
+# Agent automatically discovers MCP tools
+async def voice_workflow():
+    # Transcribe user speech
+    transcription = await agent.call_mcp_tool(
+        "voice-interaction",
+        "transcribe_audio",
+        {"audio_data": user_audio_base64}
+    )
+
+    # Process and respond
+    response = await agent.generate_response(transcription)
+
+    # Synthesize speech
+    audio = await agent.call_mcp_tool(
+        "voice-interaction",
+        "synthesize_speech",
+        {"text": response}
+    )
+
+    return audio
+```
+
+### Claude Desktop Integration (Optional)
+
+Add to your Claude Desktop config for interactive use:
 
 ```json
 {
@@ -260,36 +347,22 @@ Add to your Claude Desktop config:
 }
 ```
 
-### Example Agent Workflow
+### Documentation
 
-```python
-# User speaks to agent
-user_audio = capture_microphone()
-
-# Agent transcribes
-text = mcp.call_tool("transcribe_audio", {
-    "audio_data": user_audio
-})
-
-# Agent processes and responds
-response = agent.process(text)
-
-# Agent speaks back
-audio = mcp.call_tool("synthesize_speech", {
-    "text": response
-})
-
-play_audio(audio)
-```
-
-See `mcp-server/README.md` for full MCP documentation.
+See `mcp-server/README.md` for complete MCP integration guide including:
+- Detailed Claude Agent SDK examples
+- HTTP/SSE API documentation
+- Transport configuration options
+- Security considerations
 
 ## Documentation
 
+- **[CLAUDE_AGENT_SDK.md](CLAUDE_AGENT_SDK.md)** - **⭐ Claude Agent SDK integration guide** (start here for agent development)
+- **[MCP_TRANSPORTS.md](MCP_TRANSPORTS.md)** - Transport options and configuration
+- **[mcp-server/README.md](mcp-server/README.md)** - MCP server documentation
 - **[DEPLOYMENT.md](DEPLOYMENT.md)** - Complete deployment guide
 - **[QUICKSTART.md](QUICKSTART.md)** - 5-minute quick start
 - **[backend/README.md](backend/README.md)** - Backend API details
-- **[mcp-server/README.md](mcp-server/README.md)** - MCP integration
 - **API Docs**: http://localhost:14300/docs (when running)
 
 ## Future Enhancements

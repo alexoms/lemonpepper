@@ -1,14 +1,17 @@
 # Voice Interaction MCP Server
 
-Model Context Protocol (MCP) server that exposes voice interaction capabilities to Claude agents.
+Model Context Protocol (MCP) server that exposes voice interaction capabilities to AI agents, designed primarily for **Claude Agent SDK** (formerly Claude Code SDK) integration.
 
 ## Overview
 
-This MCP server provides tools for:
+This MCP server provides tools for AI agents to enable voice interactions:
 - **Speech-to-Text**: Transcribe audio using Whisper
 - **Text-to-Speech**: Synthesize speech using Picovoice Orca
 - **Voice Conversations**: Complete voice interaction loops
 - **Health Checks**: Monitor API availability
+
+**Primary Use Case**: Claude Agent SDK applications and programmatic AI agent workflows
+**Secondary Use Case**: Claude Desktop integration
 
 ## Tools Exposed
 
@@ -50,25 +53,74 @@ Check Voice API health status.
 
 The MCP server supports multiple transport mechanisms:
 
-### 1. stdio (Standard Input/Output)
-Default transport for Claude Desktop integration.
+### 1. HTTP with SSE (Server-Sent Events) - **Recommended**
+HTTP API with Server-Sent Events for streaming. **Primary transport for Claude Agent SDK.**
 
 **Use when:**
-- Integrating with Claude Desktop
-- Local development
-- Direct process communication
-
-### 2. HTTP with SSE (Server-Sent Events)
-HTTP API with Server-Sent Events for streaming.
-
-**Use when:**
+- **Building Claude Agent SDK applications** (primary use case)
+- AI agent-to-agent communication
+- Programmatic workflows
 - Remote access needed
 - Multiple clients
 - Web-based integrations
 - RESTful API access
 
+### 2. stdio (Standard Input/Output)
+Process-based transport for Claude Desktop integration.
+
+**Use when:**
+- Integrating with Claude Desktop
+- Local development with Claude Desktop
+- Direct process communication
+
 ### 3. Both (Concurrent)
-Run both transports simultaneously.
+Run both transports simultaneously for maximum flexibility.
+
+## Quick Start with Claude Agent SDK (HTTP)
+
+### 1. Add to `.mcp.json`
+
+In your Claude Agent SDK project root, create or update `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "voice-interaction": {
+      "url": "http://localhost:14302",
+      "transport": "http"
+    }
+  }
+}
+```
+
+### 2. Start the MCP Server
+
+```bash
+cd experimental
+docker-compose up -d mcp-server-http
+```
+
+### 3. Use in Your Agent Code
+
+The Claude Agent SDK automatically discovers and loads MCP servers from `.mcp.json`. Your agent can then call the tools:
+
+```typescript
+// Transcribe audio
+const transcription = await mcp.callTool("transcribe_audio", {
+  audio_data: base64EncodedAudio
+});
+
+// Synthesize speech
+const audioResponse = await mcp.callTool("synthesize_speech", {
+  text: "Hello from my AI agent!"
+});
+
+// Complete conversation
+const result = await mcp.callTool("voice_conversation", {
+  user_audio: userAudioBase64,
+  agent_response: "Your response here"
+});
+```
 
 ## Usage with Claude Desktop (stdio)
 
@@ -169,32 +221,113 @@ for event in client.events():
     print(f"Event: {event.event}, Data: {event.data}")
 ```
 
-## Usage in Agentic Workflows
+## Example: Claude Agent SDK Workflow
 
-Example agent workflow:
+Here's a complete example of building a voice-enabled AI agent using Claude Agent SDK:
+
+### Python Example
 
 ```python
-# User speaks
-user_audio_b64 = capture_microphone()
+from claude_agent_sdk import Agent
+import base64
+import pyaudio
 
-# Agent uses MCP tool to transcribe
-result = await mcp_client.call_tool(
-    "transcribe_audio",
-    {"audio_data": user_audio_b64}
-)
+# Initialize your agent (SDK handles MCP discovery from .mcp.json)
+agent = Agent()
 
-# Agent processes and generates response
-agent_response = process_user_input(result)
+# Capture audio from microphone
+def capture_audio():
+    p = pyaudio.PyAudio()
+    stream = p.open(format=pyaudio.paFloat32, channels=1,
+                    rate=16000, input=True, frames_per_buffer=1024)
+    frames = []
+    for _ in range(0, int(16000 / 1024 * 3)):  # 3 seconds
+        data = stream.read(1024)
+        frames.append(data)
+    stream.stop_stream()
+    stream.close()
+    p.terminate()
 
-# Agent synthesizes response
-audio = await mcp_client.call_tool(
-    "synthesize_speech",
-    {"text": agent_response}
-)
+    audio_bytes = b''.join(frames)
+    return base64.b64encode(audio_bytes).decode()
 
-# Play audio to user
-play_audio(audio)
+# Voice interaction loop
+async def voice_agent_loop():
+    print("Listening...")
+    user_audio = capture_audio()
+
+    # Transcribe user speech using MCP tool
+    transcription = await agent.call_mcp_tool(
+        "voice-interaction",
+        "transcribe_audio",
+        {"audio_data": user_audio}
+    )
+
+    print(f"User said: {transcription}")
+
+    # Agent processes and generates response
+    agent_response = await agent.generate_response(transcription)
+
+    print(f"Agent: {agent_response}")
+
+    # Synthesize agent response
+    audio = await agent.call_mcp_tool(
+        "voice-interaction",
+        "synthesize_speech",
+        {"text": agent_response}
+    )
+
+    # Play audio back to user
+    play_audio(base64.b64decode(audio))
+
+# Run the agent
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(voice_agent_loop())
 ```
+
+### TypeScript/JavaScript Example
+
+```typescript
+import { Agent } from '@anthropic-ai/agent-sdk';
+
+const agent = new Agent();
+
+async function voiceAgentWorkflow() {
+  // Capture audio from user (implementation depends on your platform)
+  const userAudio = await captureAudioFromMicrophone();
+  const base64Audio = Buffer.from(userAudio).toString('base64');
+
+  // Transcribe using MCP
+  const transcription = await agent.callMCPTool(
+    'voice-interaction',
+    'transcribe_audio',
+    { audio_data: base64Audio }
+  );
+
+  console.log('User:', transcription.text);
+
+  // Generate agent response
+  const response = await agent.generateResponse(transcription.text);
+
+  console.log('Agent:', response);
+
+  // Synthesize speech
+  const audioResponse = await agent.callMCPTool(
+    'voice-interaction',
+    'synthesize_speech',
+    { text: response }
+  );
+
+  // Play audio
+  await playAudio(audioResponse);
+}
+```
+
+## Complete Integration Guide
+
+For detailed Claude Agent SDK integration examples and best practices, see:
+**[CLAUDE_AGENT_SDK.md](../CLAUDE_AGENT_SDK.md)** - Complete guide with examples
 
 ## Environment Variables
 

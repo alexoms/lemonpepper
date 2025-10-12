@@ -2,55 +2,13 @@
 
 ## Overview
 
-The Voice Interaction MCP server now supports multiple transport mechanisms, allowing it to be used in various deployment scenarios beyond just Claude Desktop.
+The Voice Interaction MCP server supports multiple transport mechanisms, designed primarily for **Claude Agent SDK** (formerly Claude Code SDK) integration and other programmatic AI agent workflows. It also supports Claude Desktop for interactive use cases.
 
 ## Supported Transports
 
-### 1. stdio (Standard Input/Output)
+### 1. HTTP with SSE (Server-Sent Events)
 
-**Default transport for Claude Desktop integration.**
-
-#### Characteristics:
-- **Protocol:** JSON-RPC over stdio streams
-- **Connection:** Direct process communication
-- **Latency:** Very low (local)
-- **Scalability:** Single client per instance
-- **Security:** Process-level isolation
-
-#### Use Cases:
-- ✅ Claude Desktop integration
-- ✅ Local agent development
-- ✅ Command-line tools
-- ✅ Process-to-process communication
-
-#### Configuration:
-```bash
-export MCP_TRANSPORT=stdio
-python server_multi_transport.py
-```
-
-#### Claude Desktop Config:
-```json
-{
-  "mcpServers": {
-    "voice-interaction": {
-      "command": "docker",
-      "args": ["compose", "-f", "/path/to/docker-compose.yml",
-               "exec", "-T", "mcp-server", "python",
-               "server_multi_transport.py"],
-      "env": {
-        "MCP_TRANSPORT": "stdio"
-      }
-    }
-  }
-}
-```
-
----
-
-### 2. HTTP with SSE (Server-Sent Events)
-
-**REST API with Server-Sent Events for web and remote integrations.**
+**Primary transport for Claude Agent SDK and programmatic agent workflows.**
 
 #### Characteristics:
 - **Protocol:** HTTP + JSON
@@ -61,12 +19,14 @@ python server_multi_transport.py
 - **Security:** Standard HTTP security (add TLS, auth)
 
 #### Use Cases:
+- ✅ **Claude Agent SDK integration** (primary)
+- ✅ AI agent-to-agent communication
+- ✅ Programmatic agent workflows
 - ✅ Remote agent access
 - ✅ Web application integration
 - ✅ Microservices architecture
 - ✅ Load-balanced deployments
 - ✅ Cross-platform clients
-- ✅ REST API consumers
 
 #### Configuration:
 ```bash
@@ -74,6 +34,53 @@ export MCP_TRANSPORT=http
 export MCP_HTTP_PORT=8001
 export MCP_HTTP_HOST=0.0.0.0
 python server_multi_transport.py
+```
+
+#### Claude Agent SDK Integration:
+
+**`.mcp.json` Configuration:**
+```json
+{
+  "mcpServers": {
+    "voice-interaction": {
+      "command": "docker",
+      "args": [
+        "compose", "-f", "/path/to/experimental/docker-compose.yml",
+        "exec", "-T", "mcp-server-http", "python", "server_multi_transport.py"
+      ],
+      "env": {
+        "MCP_TRANSPORT": "http",
+        "MCP_HTTP_PORT": "8001"
+      }
+    }
+  }
+}
+```
+
+**Direct HTTP Access (Recommended for Claude Agent SDK):**
+```json
+{
+  "mcpServers": {
+    "voice-interaction": {
+      "url": "http://localhost:14302",
+      "transport": "http"
+    }
+  }
+}
+```
+
+**Using in Agent Code:**
+```typescript
+// Claude Agent SDK automatically discovers MCP servers from .mcp.json
+// Your agent can directly call the tools:
+
+const transcription = await mcp.callTool("transcribe_audio", {
+  audio_data: base64AudioData
+});
+
+const speech = await mcp.callTool("synthesize_speech", {
+  text: "Hello from my AI agent!"
+});
 ```
 
 #### API Endpoints:
@@ -170,6 +177,48 @@ eventSource.addEventListener('complete', () => {
 
 ---
 
+### 2. stdio (Standard Input/Output)
+
+**Optional transport for Claude Desktop integration.**
+
+#### Characteristics:
+- **Protocol:** JSON-RPC over stdio streams
+- **Connection:** Direct process communication
+- **Latency:** Very low (local)
+- **Scalability:** Single client per instance
+- **Security:** Process-level isolation
+
+#### Use Cases:
+- ✅ Claude Desktop integration
+- ✅ Local development with Claude Desktop
+- ✅ Command-line tools
+- ✅ Process-to-process communication
+
+#### Configuration:
+```bash
+export MCP_TRANSPORT=stdio
+python server_multi_transport.py
+```
+
+#### Claude Desktop Config:
+```json
+{
+  "mcpServers": {
+    "voice-interaction": {
+      "command": "docker",
+      "args": ["compose", "-f", "/path/to/docker-compose.yml",
+               "exec", "-T", "mcp-server", "python",
+               "server_multi_transport.py"],
+      "env": {
+        "MCP_TRANSPORT": "stdio"
+      }
+    }
+  }
+}
+```
+
+---
+
 ### 3. Both (Concurrent)
 
 **Run both stdio and HTTP transports simultaneously.**
@@ -232,24 +281,48 @@ Access:
 
 ## Comparison Matrix
 
-| Feature | stdio | HTTP/SSE | Both |
-|---------|-------|----------|------|
-| **Latency** | Lowest | Low | Mixed |
-| **Concurrent Clients** | 1 | Many | Many |
-| **Remote Access** | ❌ | ✅ | ✅ |
-| **Web Integration** | ❌ | ✅ | ✅ |
-| **Claude Desktop** | ✅ | ⚠️ | ✅ |
-| **Setup Complexity** | Low | Medium | Medium |
-| **Resource Usage** | Low | Medium | High |
-| **Authentication** | Process | HTTP Auth | Both |
-| **Load Balancing** | ❌ | ✅ | ✅ |
-| **Monitoring** | Limited | HTTP Logs | Both |
+| Feature | HTTP/SSE | stdio | Both |
+|---------|----------|-------|------|
+| **Claude Agent SDK** | ✅ Recommended | ⚠️ Limited | ✅ |
+| **AI Agent Workflows** | ✅ | ❌ | ✅ |
+| **Concurrent Clients** | Many | 1 | Many |
+| **Remote Access** | ✅ | ❌ | ✅ |
+| **Web Integration** | ✅ | ❌ | ✅ |
+| **Claude Desktop** | ⚠️ | ✅ | ✅ |
+| **Latency** | Low | Lowest | Mixed |
+| **Setup Complexity** | Medium | Low | Medium |
+| **Resource Usage** | Medium | Low | High |
+| **Authentication** | HTTP Auth | Process | Both |
+| **Load Balancing** | ✅ | ❌ | ✅ |
+| **Monitoring** | HTTP Logs | Limited | Both |
 
 ---
 
 ## Architecture Diagrams
 
-### stdio Transport
+### HTTP/SSE Transport (Primary - Claude Agent SDK)
+```
+┌──────────────────┐  ┌──────────────────┐  ┌─────────┐
+│ Claude Agent SDK │  │  AI Agents/Apps  │  │Web Clients│
+│   Applications   │  │                  │  │         │
+└────────┬─────────┘  └────────┬─────────┘  └────┬────┘
+         │                     │                  │
+         │       HTTP/SSE (port 14302)           │
+         └─────────────────────┬──────────────────┘
+                               ▼
+                      ┌────────────────┐
+                      │  MCP Server    │
+                      │   (HTTP/SSE)   │
+                      └────────┬───────┘
+                               │ HTTP
+                               ▼
+                      ┌────────────────┐
+                      │  Voice API     │
+                      │   Backend      │
+                      └────────────────┘
+```
+
+### stdio Transport (Optional - Claude Desktop)
 ```
 ┌──────────────┐
 │Claude Desktop│
@@ -269,44 +342,23 @@ Access:
 └──────────────┘
 ```
 
-### HTTP/SSE Transport
-```
-┌─────────┐  ┌─────────┐  ┌─────────┐
-│Web App  │  │ Agent   │  │ Client  │
-└────┬────┘  └────┬────┘  └────┬────┘
-     │            │            │
-     │  HTTP/SSE (port 14302)  │
-     └────────────┬────────────┘
-                  ▼
-         ┌────────────────┐
-         │  MCP Server    │
-         │   (HTTP/SSE)   │
-         └────────┬───────┘
-                  │ HTTP
-                  ▼
-         ┌────────────────┐
-         │ Voice API      │
-         │  Backend       │
-         └────────────────┘
-```
-
 ### Both Transports
 ```
-┌──────────────┐         ┌─────────┐
-│Claude Desktop│         │Web Clients│
-└──────┬───────┘         └────┬─────┘
-       │ stdio                │ HTTP/SSE
-       └──────┬───────────────┘
-              ▼
-      ┌───────────────┐
-      │  MCP Server   │
-      │ (Both modes)  │
-      └───────┬───────┘
-              │ HTTP
-              ▼
-      ┌───────────────┐
-      │  Voice API    │
-      └───────────────┘
+┌──────────────────┐                    ┌──────────────┐
+│ Claude Agent SDK │                    │Claude Desktop│
+└────────┬─────────┘                    └──────┬───────┘
+         │ HTTP/SSE                            │ stdio
+         └──────┬──────────────────────────────┘
+                ▼
+        ┌───────────────┐
+        │  MCP Server   │
+        │ (Both modes)  │
+        └───────┬───────┘
+                │ HTTP
+                ▼
+        ┌───────────────┐
+        │  Voice API    │
+        └───────────────┘
 ```
 
 ---
