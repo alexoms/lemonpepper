@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+websockets
+python-multipart
+numpy
+pywhispercpp
+pvorca
+sounddevice
+aiohttp
