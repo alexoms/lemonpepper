@@ -1,0 +1,232 @@
+name: Deploy Experimental to pop-os-1
+
+on:
+  push:
+    branches: [ feature/web, main ]
+    paths:
+      - 'experimental/**'
+      - '.github/workflows/deploy-experimental.yml'
+
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'development'
+        type: choice
+        options:
+          - production
+          - staging
+          - development
+      force_rebuild:
+        description: 'Force rebuild without cache (ignore Docker layer cache)'
+        required: false
+        default: false
+        type: boolean
+      cleanup_first:
+        description: 'Remove existing containers before deploying'
+        required: false
+        default: true
+        type: boolean
+
+env:
+  DOCKER_BUILDKIT: 1
+  COMPOSE_DOCKER_CLI_BUILD: 1
+  PROJECT_PATH: experimental
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, pop-os-1]
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set deployment variables
+        id: vars
+        run: |
+          echo "timestamp=$(date +%s)" >> $GITHUB_OUTPUT
+          echo "short_sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          echo "branch=$(echo ${GITHUB_REF#refs/heads/})" >> $GITHUB_OUTPUT
+
+          # Set environment based on branch or input
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            ENV="${{ inputs.environment }}"
+          elif [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            ENV="production"
+          else
+            ENV="development"
+          fi
+          echo "env=$ENV" >> $GITHUB_OUTPUT
+          echo "Deploying to environment: $ENV"
+
+      - name: Verify system requirements
+        run: |
+          echo "=== System Information ==="
+          uname -a
+          echo ""
+          echo "=== Docker Version ==="
+          docker --version
+          docker compose version
+          echo ""
+          echo "=== Disk Space ==="
+          df -h /
+          echo ""
+          echo "=== Memory ==="
+          free -h
+
+      - name: Check for required environment variables
+        run: |
+          echo "Checking for .env file in experimental directory..."
+          if [ ! -f "${{ env.PROJECT_PATH }}/.env" ]; then
+            echo "Warning: .env file not found. Creating from .env.example..."
+            if [ -f "${{ env.PROJECT_PATH }}/.env.example" ]; then
+              cp "${{ env.PROJECT_PATH }}/.env.example" "${{ env.PROJECT_PATH }}/.env"
+              echo "Please update .env file with actual values before deployment completes."
+            else
+              echo "Error: Neither .env nor .env.example found!"
+              exit 1
+            fi
+          fi
+
+      - name: Cleanup existing containers
+        if: inputs.cleanup_first == true || github.event_name == 'push'
+        run: |
+          echo "Stopping and removing existing containers..."
+          cd ${{ env.PROJECT_PATH }}
+          docker compose down --remove-orphans || true
+
+          # Clean up any dangling containers from this project
+          docker ps -a | grep -E "voice-(api|mcp)" | awk '{print $1}' | xargs -r docker rm -f || true
+
+      - name: Pull latest base images (if available)
+        run: |
+          echo "Attempting to pull latest base images..."
+          docker pull ghcr.io/${{ github.repository_owner }}/voice-interaction-backend-base:latest || echo "Backend base image not found, will build from scratch"
+          docker pull ghcr.io/${{ github.repository_owner }}/voice-interaction-mcp-server-base:latest || echo "MCP server base image not found, will build from scratch"
+          docker pull ghcr.io/${{ github.repository_owner }}/voice-interaction-frontend-base:latest || echo "Frontend base image not found, will build from scratch"
+
+      - name: Build Docker images
+        run: |
+          cd ${{ env.PROJECT_PATH }}
+
+          BUILD_ARGS=""
+          if [ "${{ inputs.force_rebuild }}" == "true" ]; then
+            BUILD_ARGS="--no-cache"
+            echo "Building with no cache..."
+          else
+            echo "Building with cache..."
+          fi
+
+          docker compose build $BUILD_ARGS
+
+      - name: Start services
+        run: |
+          cd ${{ env.PROJECT_PATH }}
+          docker compose up -d
+
+          echo "Waiting for services to start..."
+          sleep 10
+
+      - name: Verify deployment
+        run: |
+          cd ${{ env.PROJECT_PATH }}
+
+          echo "=== Container Status ==="
+          docker compose ps
+          echo ""
+
+          echo "=== Service Health Checks ==="
+          # Wait up to 60 seconds for services to be healthy
+          TIMEOUT=60
+          ELAPSED=0
+
+          while [ $ELAPSED -lt $TIMEOUT ]; do
+            # Check backend health
+            if curl -sf http://localhost:14300/health > /dev/null 2>&1; then
+              echo "✓ Backend is healthy"
+              BACKEND_OK=true
+            else
+              BACKEND_OK=false
+            fi
+
+            # Check frontend
+            if curl -sf http://localhost:14301/health > /dev/null 2>&1 || curl -sf http://localhost:14301/ > /dev/null 2>&1; then
+              echo "✓ Frontend is healthy"
+              FRONTEND_OK=true
+            else
+              FRONTEND_OK=false
+            fi
+
+            # Check MCP server HTTP endpoint
+            if curl -sf http://localhost:14302/health > /dev/null 2>&1; then
+              echo "✓ MCP Server HTTP is healthy"
+              MCP_OK=true
+            else
+              MCP_OK=false
+            fi
+
+            if [ "$BACKEND_OK" = true ] && [ "$FRONTEND_OK" = true ] && [ "$MCP_OK" = true ]; then
+              echo ""
+              echo "All services are healthy!"
+              exit 0
+            fi
+
+            sleep 5
+            ELAPSED=$((ELAPSED + 5))
+          done
+
+          echo ""
+          echo "Warning: Some services may not be fully healthy yet"
+          echo "Check logs with: docker compose -f experimental/docker-compose.yml logs"
+
+      - name: Show service logs
+        if: always()
+        run: |
+          cd ${{ env.PROJECT_PATH }}
+          echo "=== Recent Service Logs ==="
+          docker compose logs --tail=50
+
+      - name: Deployment summary
+        if: always()
+        run: |
+          echo "=========================================="
+          echo "Deployment Summary"
+          echo "=========================================="
+          echo "Environment: ${{ steps.vars.outputs.env }}"
+          echo "Branch: ${{ steps.vars.outputs.branch }}"
+          echo "Commit: ${{ steps.vars.outputs.short_sha }}"
+          echo "Timestamp: $(date -d @${{ steps.vars.outputs.timestamp }} '+%Y-%m-%d %H:%M:%S')"
+          echo ""
+          echo "Service URLs:"
+          echo "  Backend API: http://localhost:14300"
+          echo "  Frontend: http://localhost:14301"
+          echo "  MCP Server HTTP: http://localhost:14302"
+          echo ""
+          echo "Management commands:"
+          echo "  View logs: docker compose -f experimental/docker-compose.yml logs -f"
+          echo "  Stop services: docker compose -f experimental/docker-compose.yml down"
+          echo "  Restart: docker compose -f experimental/docker-compose.yml restart"
+          echo "=========================================="
+
+      - name: Cleanup on failure
+        if: failure()
+        run: |
+          echo "Deployment failed, collecting diagnostic information..."
+          cd ${{ env.PROJECT_PATH }}
+
+          echo "=== Container Status ==="
+          docker compose ps
+
+          echo "=== Full Logs ==="
+          docker compose logs
+
+          echo "=== System Resources ==="
+          df -h
+          free -h
+
+          # Optional: Cleanup failed deployment
+          # docker compose down --remove-orphans

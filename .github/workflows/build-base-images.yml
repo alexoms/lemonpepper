@@ -1,0 +1,163 @@
+name: Build Experimental Base Docker Images
+
+on:
+  # Manual trigger
+  workflow_dispatch:
+    inputs:
+      force_rebuild:
+        description: 'Force rebuild all base images'
+        required: false
+        default: false
+        type: boolean
+
+  # Trigger on changes to Dockerfiles or dependencies
+  push:
+    paths:
+      - 'experimental/backend/Dockerfile*'
+      - 'experimental/mcp-server/Dockerfile*'
+      - 'experimental/web/speech-demo/Dockerfile*'
+      - 'experimental/backend/requirements.txt'
+      - 'experimental/mcp-server/requirements.txt'
+      - 'experimental/web/speech-demo/package*.json'
+      - '.github/workflows/build-base-images.yml'
+    branches:
+      - feature/web
+      - main
+
+  # Weekly rebuild to get latest security updates
+  schedule:
+    - cron: '0 2 * * 0' # Every Sunday at 2 AM UTC
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/voice-interaction
+
+jobs:
+  build-base-images:
+    runs-on: [self-hosted, pop-os-1]
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      matrix:
+        service:
+          - name: "backend-base"
+            dockerfile: "experimental/backend/Dockerfile.base"
+            context: "."
+            target: "base"
+          - name: "mcp-server-base"
+            dockerfile: "experimental/mcp-server/Dockerfile.base"
+            context: "experimental/mcp-server"
+            target: "base"
+          - name: "frontend-base"
+            dockerfile: "experimental/web/speech-demo/Dockerfile.base"
+            context: "experimental/web/speech-demo"
+            target: "base"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: network=host
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_PREFIX }}-${{ matrix.service.name }}
+          tags: |
+            type=raw,value=latest
+            type=sha,prefix={{branch}}-
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+
+      - name: Check if base image needs rebuilding
+        id: check
+        run: |
+          if [ "${{ inputs.force_rebuild }}" == "true" ]; then
+            echo "rebuild=true" >> $GITHUB_OUTPUT
+            echo "Force rebuild requested"
+            exit 0
+          fi
+
+          # Check if Dockerfile exists
+          if [ ! -f "${{ matrix.service.dockerfile }}" ]; then
+            echo "Base Dockerfile not found: ${{ matrix.service.dockerfile }}"
+            echo "rebuild=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Check if base image exists
+          IMAGE_NAME="${{ env.IMAGE_PREFIX }}-${{ matrix.service.name }}:latest"
+          if docker manifest inspect "$IMAGE_NAME" > /dev/null 2>&1; then
+            echo "Base image exists, checking if rebuild needed..."
+            # Check if any relevant files changed
+            CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || echo "")
+            if echo "$CHANGED_FILES" | grep -qE "^${{ matrix.service.context }}/"; then
+              echo "rebuild=true" >> $GITHUB_OUTPUT
+              echo "Changes detected in context path"
+            else
+              echo "rebuild=false" >> $GITHUB_OUTPUT
+              echo "No changes detected"
+            fi
+          else
+            echo "rebuild=true" >> $GITHUB_OUTPUT
+            echo "Base image does not exist"
+          fi
+
+      - name: Build and push base image
+        if: steps.check.outputs.rebuild == 'true'
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.service.context }}
+          file: ${{ matrix.service.dockerfile }}
+          target: ${{ matrix.service.target }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=registry,ref=${{ env.IMAGE_PREFIX }}-${{ matrix.service.name }}:buildcache
+          cache-to: type=registry,ref=${{ env.IMAGE_PREFIX }}-${{ matrix.service.name }}:buildcache,mode=max
+          build-args: |
+            BUILDKIT_INLINE_CACHE=1
+
+      - name: Verify base image
+        if: steps.check.outputs.rebuild == 'true'
+        run: |
+          echo "Verifying base image..."
+          docker pull ${{ env.IMAGE_PREFIX }}-${{ matrix.service.name }}:latest
+          docker images | grep ${{ matrix.service.name }}
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker system prune -af --filter "until=24h" || true
+
+  cleanup-old-images:
+    runs-on: [self-hosted, pop-os-1]
+    needs: build-base-images
+    if: always()
+
+    steps:
+      - name: Cleanup old Docker images
+        run: |
+          echo "Cleaning up old Docker images..."
+          # Remove dangling images
+          docker image prune -f || true
+
+          # Remove old build cache (keep last 7 days)
+          docker builder prune -af --filter "until=168h" || true
+
+          echo "Cleanup complete"
